@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>b2b-mig-automation</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <smooks.bom.version>2.2.1</smooks.bom.version>
+        <smooks.edifact.cartridge.version>2.1.0</smooks.edifact.cartridge.version>
+        <jackson.version>2.18.3</jackson.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.smooks</groupId>
+                <artifactId>smooks-bom</artifactId>
+                <version>${smooks.bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jaxb</groupId>
+                <artifactId>jaxb-runtime</artifactId>
+                <version>4.0.5</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>5.11.4</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.xlate</groupId>
+            <artifactId>staedi</artifactId>
+            <version>1.25.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>smooks-edifact-cartridge</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>edifact-schemas</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+            <classifier>d96a</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>d96a-edifact-binding</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges</groupId>
+            <artifactId>smooks-javabean-cartridge</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.36</version>
+            <scope>provided</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jsonschema2pojo</groupId>
+                <artifactId>jsonschema2pojo-maven-plugin</artifactId>
+                <version>1.1.1</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.github.yanayita</groupId>
+                        <artifactId>helper-js2pojo</artifactId>
+                        <version>1.0.1</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <removeOldOutput>true</removeOldOutput>
+                    <useCommonsLang3>true</useCommonsLang3>
+                    <includeConstructors>false</includeConstructors>
+                    <includeAdditionalProperties>false</includeAdditionalProperties>
+                    <includeGeneratedAnnotation>false</includeGeneratedAnnotation>
+                    <includeHashcodeAndEquals>false</includeHashcodeAndEquals>
+                    <includeGetters>false</includeGetters>
+                    <includeSetters>false</includeSetters>
+                    <includeToString>false</includeToString>
+                    <formatTimes>true</formatTimes>
+                    <formatDates>true</formatDates>
+                    <formatDateTimes>true</formatDateTimes>
+                    <sourceDirectory>${basedir}/src/main/resources/b2b-payload</sourceDirectory>
+                    <targetPackage>com.schneider.ei.b2b.mig</targetPackage>
+                    <customAnnotator>io.github.paulushcgcj.js2pojo.LombokAnnotator</customAnnotator>
+                    <sourceType>json</sourceType>
+                    <removeOldOutput>false</removeOldOutput>
+                </configuration>
+                <!--executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions-->
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<smooks-resource-list xmlns="https://www.smooks.org/xsd/smooks-2.0.xsd"
+                      xmlns:core="https://www.smooks.org/xsd/smooks/smooks-core-1.6.xsd"
+                      xmlns:edifact="https://www.smooks.org/xsd/smooks/edifact-2.0.xsd">
+
+    <edifact:parser cacheOnDisk="true" schemaUri="/d96a/EDIFACT-Messages.dfdl.xsd">
+        <edifact:messageTypes>
+            <edifact:messageType>ORDERS</edifact:messageType>
+            <edifact:messageType>INVOIC</edifact:messageType>
+        </edifact:messageTypes>
+    </edifact:parser>
+
+    <core:smooks filterSourceOn="/Interchange">
+        <core:action>
+            <core:inline>
+                <core:replace/>
+            </core:inline>
+        </core:action>
+        <core:config>
+            <smooks-resource-list>
+                <edifact:unparser schemaUri="/d96a/EDIFACT-Messages.dfdl.xsd" unparseOnNode="*">
+                    <edifact:messageTypes>
+                        <edifact:messageType>ORDERS</edifact:messageType>
+                        <edifact:messageType>INVOIC</edifact:messageType>
+                    </edifact:messageTypes>
+                </edifact:unparser>
+            </smooks-resource-list>
+        </core:config>
+    </core:smooks>
+</smooks-resource-list>
