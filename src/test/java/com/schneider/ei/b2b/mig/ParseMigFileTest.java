@@ -3,11 +3,16 @@ package com.schneider.ei.b2b.mig;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.schneider.ei.b2b.mig.model.migs.Domain;
+import com.schneider.ei.b2b.mig.model.migs.Node;
+import com.schneider.ei.b2b.mig.model.migs.NodeStatus;
+import com.schneider.ei.b2b.mig.model.migs.Qualifier;
+import com.schneider.ei.b2b.mig.model.migs.QualifierMarker;
+import com.schneider.ei.b2b.mig.model.migs.QualifierValue;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
