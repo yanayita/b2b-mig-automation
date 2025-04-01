@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<smooks-resource-list xmlns="https://www.smooks.org/xsd/smooks-2.0.xsd"
+                      xmlns:edifact="https://www.smooks.org/xsd/smooks/edifact-2.0.xsd"
+                      xmlns:jb="https://www.smooks.org/xsd/smooks/javabean-1.6.xsd">
+
+    <edifact:parser schemaUri="/d96a/EDIFACT-Messages.dfdl.xsd">
+        <edifact:messageTypes>
+            <edifact:messageType>ORDERS</edifact:messageType>
+        </edifact:messageTypes>
+    </edifact:parser>
+
+    <jb:bean beanId="unhSegment" class="org.example.EdifactInfo">
+        <jb:value property="version" data="header/segment[1]/field[3]" />
+    </jb:bean>
+
+</smooks-resource-list>

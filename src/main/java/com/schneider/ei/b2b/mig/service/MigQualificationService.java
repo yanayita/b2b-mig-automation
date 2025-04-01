@@ -1,4 +1,4 @@
-package com.schneider.ei.b2b.mig;
+package com.schneider.ei.b2b.mig.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,85 +20,134 @@ import com.schneider.ei.b2b.mig.model.migs.QualifierPath;
 import com.schneider.ei.b2b.mig.model.migs.QualifierValue;
 import com.schneider.ei.b2b.mig.model.migs.SelectedCodelist;
 import com.schneider.ei.b2b.mig.model.migs.Value;
+import com.schneider.ei.b2b.mig.model.process.AnalysisResults;
+import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+@Service
+public class MigQualificationService {
 
-public class QualifyNodeTest {
+    @Autowired
+    private ObjectMapper mapper;
 
-    private ObjectMapper mapper = new ObjectMapper();
+    @Autowired
+    private MigUtils migUtils;
 
-    @Test
-    public void test() throws IOException, MigAutomationException {
-        InputStream is = QualifyNodeTest.class.getClassLoader().getResourceAsStream("test_01/MIG_input.json");
-        Mig rootNodeInput = mapper.readValue(is, Mig.class);
-        List<Node> inputNodes = rootNodeInput.getNodes();
-        for (Node nodes : inputNodes) {
-            populateParent(nodes);
+    @Autowired
+    private EdifactAnalyzerService edifactAnalyzerService;
+
+    public void qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
+        try {
+            // Test the qualifyNode method
+            InputStream is = new FileInputStream(filePath);
+            Mig mig = mapper.readValue(is, Mig.class);
+            List<Node> inputNodes = mig.getNodes();
+            for (Node nodes : inputNodes) {
+                migUtils.populateParent(nodes);
+            }
+            LinkedHashMap<String, QualifierPath> qualiferPaths = new LinkedHashMap<>();
+            mig.getQualifiers().forEach(item -> qualiferPaths.put(item.getKey(), item));
+
+            for (Map.Entry<QualifierMarkerData, Set<String>> entry : analysisResults.getXPathsFound().entrySet()) {
+                QualifierMarkerData qualifierMarkerData = entry.getKey();
+                String xPathDomain = qualifierMarkerData.getDomainXpath();
+                Set<String> values = entry.getValue();
+                Node sourceNode = findNode(xPathDomain, inputNodes);
+                if (sourceNode != null) {
+                    for (String value : values) {
+                        qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
+                    }
+                } else {
+                    throw new MigAutomationException("Node not found for xPath: " + xPathDomain);
+                }
+            }
+
+            System.out.println(mapper.writeValueAsString(mig));
+
+
+        } catch (IOException e) {
+            throw new MigAutomationException("Error while reading file: " + filePath, e);
         }
-
-        LinkedHashMap<String, QualifierPath> qualiferPaths = new LinkedHashMap<>();
-        rootNodeInput.getQualifiers().forEach(item -> qualiferPaths.put(item.getKey(), item));
-
-
-        Node inputDTM = findNode("/51C96EACDDBAE8ED:Interchange/ORDERS/DTM", inputNodes);
-
-        qualifyNode(inputDTM, "137", qualiferPaths, rootNodeInput);
-        rootNodeInput.setQualifiers(qualiferPaths.values().stream().toList());
-        inputDTM = findNode("/51C96EACDDBAE8ED:Interchange/ORDERS/DTM[./C507/2005=137]", inputNodes);
-
-        is = QualifyNodeTest.class.getClassLoader().getResourceAsStream("test_01/MIG_output.json");
-        ObjectNode rootNodeOutput = mapper.readValue(is, ObjectNode.class);
-        List<Node> outputNodes = mapper.convertValue(rootNodeOutput.get("Nodes"), new TypeReference<>() {
-        });
-        Node outputDTM = findNode("/51C96EACDDBAE8ED:Interchange/ORDERS/DTM[./C507/2005=137]", outputNodes);
-
-        String inputDTMString = mapper.writeValueAsString(inputDTM);
-        String outputDTMString = mapper.writeValueAsString(outputDTM);
-
-        //assertThat(inputDTMString).isEqualTo(outputDTMString);
-
-        rootNodeInput.setNodes(inputNodes);
-        String outputMIG = mapper.writeValueAsString(rootNodeInput);
-        System.out.println(outputMIG);
-
     }
 
-    private Node findSelectingNode(Node sourceNode, String xPath) throws MigAutomationException {
-        String[] xPathTokens = StringUtils.split(xPath, "/");
-        Node tmpNode = sourceNode;
-        for (int i = 0; i < xPathTokens.length; i++) {
-            String token = xPathTokens[i];
-            if (token.equals(".")) {
-                continue;
-            } else if (token.equals("..")) {
-                tmpNode = tmpNode.getParent();
-            } else {
-                tmpNode = tmpNode.getNodes().stream().filter(item -> item.getId().equals(token)).findFirst().get();
+    public Set<QualifierMarkerData> getQualifierXPaths(String filePath) throws MigAutomationException {
+        try {
+            InputStream is = new FileInputStream(filePath);
+            Mig rootNodeInput = mapper.readValue(is, Mig.class);
+            List<Node> nodes = rootNodeInput.getNodes();
+            Set<QualifierMarkerData> qualifierXpaths = new LinkedHashSet<>();
+            Set<String> valueXpaths = new LinkedHashSet<>();
+            for (Node node : nodes) {
+                getXpaths(node, qualifierXpaths, valueXpaths);
+            }
+
+            return qualifierXpaths;
+        } catch (IOException e) {
+            throw new MigAutomationException("Error while reading file: " + filePath, e);
+        }
+    }
+
+    public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths, Set<String> valueXpaths) {
+        String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
+        if (node.getNodes().isEmpty()) {
+            valueXpaths.add(nodeXpath);
+        }
+        if (!node.getQualifierMarkers().isEmpty()) {
+            for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
+                QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
+                        .qualifyingXpath(nodeXpath + "/" + qualifierMarker.getRelativeXPath().replaceAll("(\\[.*\\])", ""))
+                        .domainXpath(nodeXpath)
+                        .qualifyingRelativeXpath(qualifierMarker.getRelativeXPath())
+                        .build();
+                qualifierXpaths.add(qualifierMarkerData);
             }
         }
-        if (xPathTokens.length > 0 && sourceNode == tmpNode) {
-            throw new MigAutomationException("Cound not find node with xPath: " + xPath);
+        if (!node.getQualifiers().isEmpty()) {
+            for (Qualifier qualifier : node.getQualifiers()) {
+
+                QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
+                        .qualifyingXpath(nodeXpath + "/" + qualifier.getRelativeXPath().replaceAll("(\\[.*\\])", ""))
+                        .domainXpath(nodeXpath)
+                        .build();
+                qualifierXpaths.add(qualifierMarkerData);
+            }
+        }
+        for (Node child : node.getNodes()) {
+            getXpaths(child, qualifierXpaths, valueXpaths);
         }
 
-        return tmpNode;
     }
 
-    private void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths, Mig mig) throws MigAutomationException {
+    private QualifierMarker findQualifierMarker(Node sourceNode, String xPath) {
+        for (QualifierMarker qualifierMarker : sourceNode.getQualifierMarkers()) {
+            if (qualifierMarker.getRelativeXPath().equals(xPath)) {
+                return qualifierMarker;
+            }
+        }
+        return null;
 
-        QualifierMarker qualifierMarker = sourceNode.getQualifierMarkers().get(0);
+    }
+
+
+    public void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths, Mig mig, QualifierMarkerData markerData) throws MigAutomationException {
+
+        QualifierMarker qualifierMarker = findQualifierMarker(sourceNode, markerData.getQualifyingRelativeXpath());
         String originalDomainXpath = sourceNode.getDomain().getXPath();
         String newDomainXpath = originalDomainXpath + "[" + qualifierMarker.getRelativeXPath() + "=" + value + "]";
         String xmlNodeName = sourceNode.getXMLNodeName() + "_gq_" + value;
@@ -180,8 +229,8 @@ public class QualifyNodeTest {
         targetNode.getDocumentation().getName().setArtifactValue(ArtifactValue.builder()
                 .vertexGUID(generateGUID())
                 .id(nodeNameGUID)
-                        .languageCode("en-us")
-                        .action("MODIFIED")
+                .languageCode("en-us")
+                .action("MODIFIED")
                 .build());
         mig.getDocumentationArtifacts().put(nodeNameGUID, nodeName);
 
@@ -349,4 +398,25 @@ public class QualifyNodeTest {
             populateParent(child);
         }
     }
+
+    private Node findSelectingNode(Node sourceNode, String xPath) throws MigAutomationException {
+        String[] xPathTokens = StringUtils.split(xPath, "/");
+        Node tmpNode = sourceNode;
+        for (int i = 0; i < xPathTokens.length; i++) {
+            String token = xPathTokens[i];
+            if (token.equals(".")) {
+                continue;
+            } else if (token.equals("..")) {
+                tmpNode = tmpNode.getParent();
+            } else {
+                tmpNode = tmpNode.getNodes().stream().filter(item -> item.getId().equals(token)).findFirst().get();
+            }
+        }
+        if (xPathTokens.length > 0 && sourceNode == tmpNode) {
+            throw new MigAutomationException("Cound not find node with xPath: " + xPath);
+        }
+
+        return tmpNode;
+    }
 }
+

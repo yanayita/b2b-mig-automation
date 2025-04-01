@@ -6,6 +6,7 @@ import jakarta.xml.bind.JAXBException;
 import org.smooks.Smooks;
 import org.smooks.api.ExecutionContext;
 import org.smooks.api.SmooksException;
+import org.smooks.cartridges.edifact.EdifactReaderConfigurator;
 import org.smooks.edifact.binding.d96a.Interchange;
 import org.smooks.edifact.binding.service.UNBInterchangeHeader;
 import org.smooks.edifact.binding.service.UNHMessageHeader;
@@ -34,6 +35,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -62,7 +64,8 @@ public class Main {
     public void runSmooksTransform2() throws IOException, SAXException, SmooksException, JAXBException {
         // Configure Smooks using a Smooks config...
         Smooks smooks = new Smooks(new DefaultApplicationContextBuilder().withClassLoader(Main.class.getClassLoader()).build());
-        smooks.addResourceConfigs("smooks-config.bak.xml");
+        //smooks.addResourceConfigs("smooks-config.bak.xml");
+        smooks.setReaderConfig(new EdifactReaderConfigurator("/d96a/EDIFACT-Messages.dfdl.xsd").setMessageTypes(Arrays.asList("ORDERS", "ORDRSP")));
         ExecutionContext executionContext = smooks.createExecutionContext();
 
         try {

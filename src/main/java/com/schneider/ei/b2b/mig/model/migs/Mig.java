@@ -67,7 +67,7 @@ public class Mig {
     @JsonProperty("AdministrativeData")
     private AdministrativeData administrativeData;
     @JsonProperty("Documentation")
-    private Documentation documentation;
+    private Object documentation;
     @JsonProperty("Properties")
     private Object properties;
     @JsonProperty("ComplexProperties")
