@@ -68,6 +68,7 @@ public class MigFileService {
 
     public void processMigZip(String zipFilePath, String ediSamplesFolder) throws MigAutomationException {
         String unzippedFolder = extractZipFile(zipFilePath);
+        new File(unzippedFolder).deleteOnExit();
         if (zipFilePath.endsWith("_output.zip")) {
             throw new MigAutomationException("Output zip file is not supported.");
         }
@@ -95,12 +96,12 @@ public class MigFileService {
             outputStream.close();
 
 
-        String newZipFilePath = zipFilePath.replace(".zip", "_output.zip");
-        ZipFile zipFile = new ZipFile(newZipFilePath);
+            String newZipFilePath = zipFilePath.replace(".zip", "_output.zip");
+            ZipFile zipFile = new ZipFile(newZipFilePath);
 
-        // Add single file
-        zipFile.addFile(manifestFile.toFile());
-        zipFile.addFolder(migFile.toFile().getParentFile());
+            // Add single file
+            zipFile.addFile(manifestFile.toFile());
+            zipFile.addFolder(migFile.toFile().getParentFile());
 
         } catch (IOException ex) {
             throw new MigAutomationException("Error writing to file: " + migFile.toString(), ex);

@@ -15,9 +15,29 @@ public class MigFileServiceTest {
     private MigFileService migFileService;
 
     @Test
-    public void testGetZipContents() throws IOException, MigAutomationException {
-        String ediSamplesPath = "./TOP50Customers/Partners/ADALBERT ZAJADACZ/ORDERS";
-        String zipPath = "./src/test/resources/test_01/SAP_IA_MIGs_Export_2025-03-26T13-49-26.zip";
+    public void testProcessMigZipORDERS() throws MigAutomationException {
+        String ediSamplesPath = "./TOP50Customers/Partners/REXEL-GERMANY/ORDERS";
+        String zipPath = "./src/test/resources/test_01/SAP_IA_MIGs_Export_ORDERS_96A.zip";
+        migFileService.processMigZip(zipPath, ediSamplesPath);
+    }
+
+    @Test
+    public void testProcessMigZipORDRSP() throws MigAutomationException {
+        String ediSamplesPath = "./TOP50Customers/Partners/ADALBERT ZAJADACZ/ORDRSP";
+        String zipPath = "./src/test/resources/test_01/SAP_IA_MIGs_Export_ORDRSP_96A.zip";
+        migFileService.processMigZip(zipPath, ediSamplesPath);
+    }
+
+    @Test
+    public void testProcessMigZipINVOIC() throws MigAutomationException {
+        String ediSamplesPath = "./TOP50Customers/Partners/ADALBERT ZAJADACZ/INVOIC";
+        String zipPath = "./src/test/resources/test_01/SAP_IA_MIGs_Export_INVOIC_96A.zip";
+        migFileService.processMigZip(zipPath, ediSamplesPath);
+    }
+    @Test
+    public void testProcessMigZipDESADV() throws MigAutomationException {
+        String ediSamplesPath = "./TOP50Customers/Partners/ADALBERT ZAJADACZ/DESADV";
+        String zipPath = "./src/test/resources/test_01/SAP_IA_MIGs_Export_DESADV_96A.zip";
         migFileService.processMigZip(zipPath, ediSamplesPath);
     }
 }

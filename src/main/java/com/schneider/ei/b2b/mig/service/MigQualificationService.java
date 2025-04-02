@@ -22,6 +22,7 @@ import com.schneider.ei.b2b.mig.model.migs.SelectedCodelist;
 import com.schneider.ei.b2b.mig.model.migs.Value;
 import com.schneider.ei.b2b.mig.model.process.AnalysisResults;
 import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
@@ -42,11 +43,13 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class MigQualificationService {
 
     @Autowired
@@ -117,7 +120,7 @@ public class MigQualificationService {
             }
 
             mig.setQualifiers(qualiferPaths.values().stream().toList());
-
+            mig.getAdministrativeData().setModifiedOn(System.currentTimeMillis());
 
 
 
@@ -229,8 +232,13 @@ public class MigQualificationService {
         String version = ((String)((Map<String, ?>) mig.getMessageTemplate()).get("VersionId"));
 
         Codelist codeList = getCodeList(version, correspondingNode.getId());
-        Code code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst().get();
-        String idDoc = code.getDocumentation().getName().getBaseArtifactValue().getId();
+        Optional<Code> code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst();
+        if (code.isEmpty()) {
+            log.error("Code not found in code list {} - value {}. Skipping node qualification", correspondingNode.getId(), value);
+            return;
+        }
+
+        String idDoc = code.get().getDocumentation().getName().getBaseArtifactValue().getId();
         String codelistdesc = codeList.getDocumentationArtifacts().get(idDoc);
 
         // create a deep copy of the original node
@@ -319,7 +327,7 @@ public class MigQualificationService {
 
 
         Node selectingNode = findSelectingNode(targetNode, qualifierMarker.getRelativeXPath());
-        qualifyCorrespondingNode(selectingNode, code, codeList, targetNode.getQualifiers().get(0));
+        qualifyCorrespondingNode(selectingNode, code.get(), codeList, targetNode.getQualifiers().get(0));
         List<Node> childrenNodes = new ArrayList<>(targetNode.getNodes());
         for (Node child : childrenNodes) {
             qualifyChildrenNodes(child, qualiferPaths);
@@ -443,7 +451,7 @@ public class MigQualificationService {
             if (node.getDomain().getXPath().equals(xPath)) {
                 return node;
             }
-            if (node.getDomain().getXPath().replaceAll("\\[.*\\]", "").equals(xPath)) {
+            if (node.getDomain().getXPath().replaceAll("\\[.*?\\]", "").equals(xPath)) {
                 return node;
             }
             Node foundNode = findNode(xPath, node.getNodes());

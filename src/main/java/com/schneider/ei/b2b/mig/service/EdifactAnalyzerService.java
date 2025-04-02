@@ -6,12 +6,16 @@ import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
 import io.xlate.edi.stream.EDIInputFactory;
 import io.xlate.edi.stream.EDIStreamEvent;
 import io.xlate.edi.stream.EDIStreamReader;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.daffodil.japi.ValidationMode;
+import org.apache.daffodil.lib.exceptions.UsageException;
 import org.example.EdifactInfo;
 import org.example.Main;
 import org.smooks.Smooks;
 import org.smooks.api.ExecutionContext;
+import org.smooks.api.SmooksException;
 import org.smooks.api.resource.config.ResourceConfig;
 import org.smooks.cartridges.edifact.EdifactReaderConfigurator;
 import org.smooks.engine.DefaultApplicationContextBuilder;
@@ -37,6 +41,7 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -61,6 +66,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
+@Slf4j
 public class EdifactAnalyzerService {
 
     @Autowired
@@ -115,6 +121,7 @@ public class EdifactAnalyzerService {
         EdifactReaderConfigurator configurator = new EdifactReaderConfigurator("/" + version + "/EDIFACT-Messages.dfdl.xsd")
                 .setMessageTypes(Arrays.asList("ORDERS", "ORDRSP", "INVOIC", "DESADV"));
         configurator.setCacheOnDisk(true);
+        configurator.setTriadSeparator("~");
         smooks.setReaderConfig(configurator);
         ExecutionContext executionContext = smooks.createExecutionContext();
 
@@ -125,7 +132,12 @@ public class EdifactAnalyzerService {
             try {
                 File inputFile = file.toFile();
                 StringWriter writer = new StringWriter();
-                smooks.filterSource(executionContext, new StreamSource<>(new FileInputStream(inputFile)), new WriterSink<>(writer));
+                try (BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(inputFile))) {
+                    smooks.filterSource(executionContext, new StreamSource<>(bufferedInputStream), new WriterSink<>(writer));
+                } catch (SmooksException ex) {
+                    log.error("Error processing file: " + file + " version " + version, ex);
+                    continue;
+                }
 
                 DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
                 dbFactory.setNamespaceAware(true);
@@ -145,9 +157,9 @@ public class EdifactAnalyzerService {
                     String correctedPath = qualifyingMarker.getQualifyingXpath()
                             .replaceAll("(.*):Interchange", version.toUpperCase() + ":Interchange")
                             .replaceAll("/(\\d)", "/E$1")
-                            .replaceAll("/ORDERS/", "/" + version.toUpperCase() + ":Message/" + version.toUpperCase() + ":ORDERS/")
+                            .replaceAll("/(ORDERS|ORDRSP|INVOIC|DESADV)/", "/" + version.toUpperCase() + ":Message/" + version.toUpperCase() + ":$1/")
                             .replaceAll("/SG", "/SegGrp-")
-                            .replaceAll("/D96A:ORDERS/UNH/", "/UNH/");
+                            .replaceAll("/D96A:(ORDERS|ORDRSP|INVOIC|DESADV)/UNH/", "/UNH/");
                             //.replaceAll("(.*)_(\\d+)", "$1[$2]");
 
 
