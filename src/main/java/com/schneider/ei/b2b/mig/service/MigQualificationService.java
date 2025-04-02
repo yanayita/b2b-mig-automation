@@ -24,24 +24,33 @@ import com.schneider.ei.b2b.mig.model.process.AnalysisResults;
 import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class MigQualificationService {
+
+    @Autowired
+    private RestTemplate restTemplate;
 
     @Autowired
     private ObjectMapper mapper;
@@ -64,26 +73,68 @@ public class MigQualificationService {
             LinkedHashMap<String, QualifierPath> qualiferPaths = new LinkedHashMap<>();
             mig.getQualifiers().forEach(item -> qualiferPaths.put(item.getKey(), item));
 
-            for (Map.Entry<QualifierMarkerData, Set<String>> entry : analysisResults.getXPathsFound().entrySet()) {
+            var sortedResults =  analysisResults.getQualifierXPathsFound().entrySet().stream()
+                    .sorted(Comparator.comparing((item) -> item.getKey().getDomainXpath()))
+                    .toList();
+
+            for (Map.Entry<QualifierMarkerData, Set<String>> entry : sortedResults) {
                 QualifierMarkerData qualifierMarkerData = entry.getKey();
                 String xPathDomain = qualifierMarkerData.getDomainXpath();
                 Set<String> values = entry.getValue();
                 Node sourceNode = findNode(xPathDomain, inputNodes);
                 if (sourceNode != null) {
+                    if (isQualifyingNodeUsed(sourceNode)) {
+                        continue;
+                    }
                     for (String value : values) {
                         qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
                     }
+                    List<Node> siblings = sourceNode.getParent().getNodes();
+                    siblings.remove(sourceNode);
                 } else {
                     throw new MigAutomationException("Node not found for xPath: " + xPathDomain);
                 }
             }
 
-            System.out.println(mapper.writeValueAsString(mig));
+            mig.setQualifiers(qualiferPaths.values().stream().toList());
+
+            for (QualifierMarkerData qualifierMarkerData : analysisResults.getSelectedXPathsFound()) {
+                Node foundNode = findNode(qualifierMarkerData.getDomainXpath(), inputNodes);
+                if (foundNode != null){
+                    foundNode.setIsSelected(true);
+                    foundNode.setNodeStatus(NodeStatus.builder()
+                            .status("Default")
+                            .comment("")
+                            .build());
+                }
+            }
+
+            List<Node> endNodes = new ArrayList<>();
+            for (Node node : inputNodes) {
+                getEndNodes(node, endNodes);
+            }
+            for (Node node : endNodes) {
+                setSelectedParents(node);
+            }
+
+
+            String outputMig = mapper.writeValueAsString(mig);
+            System.out.println(outputMig);
 
 
         } catch (IOException e) {
             throw new MigAutomationException("Error while reading file: " + filePath, e);
         }
+    }
+
+    private boolean isQualifyingNodeUsed(Node node) throws MigAutomationException {
+        for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
+            Node foundNode = findSelectingNode(node, qualifierMarker.getRelativeXPath());
+            if (foundNode.getSelectedCodelist() != null && !foundNode.getSelectedCodelist().getSelectedCodes().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Set<QualifierMarkerData> getQualifierXPaths(String filePath) throws MigAutomationException {
@@ -92,9 +143,8 @@ public class MigQualificationService {
             Mig rootNodeInput = mapper.readValue(is, Mig.class);
             List<Node> nodes = rootNodeInput.getNodes();
             Set<QualifierMarkerData> qualifierXpaths = new LinkedHashSet<>();
-            Set<String> valueXpaths = new LinkedHashSet<>();
             for (Node node : nodes) {
-                getXpaths(node, qualifierXpaths, valueXpaths);
+                getXpaths(node, qualifierXpaths);
             }
 
             return qualifierXpaths;
@@ -103,10 +153,14 @@ public class MigQualificationService {
         }
     }
 
-    public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths, Set<String> valueXpaths) {
+    public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths) {
         String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
         if (node.getNodes().isEmpty()) {
-            valueXpaths.add(nodeXpath);
+            QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
+                    .qualifyingXpath(nodeXpath)
+                    .isQualifier(false)
+                    .build();
+            qualifierXpaths.add(qualifierMarkerData);
         }
         if (!node.getQualifierMarkers().isEmpty()) {
             for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
@@ -114,6 +168,7 @@ public class MigQualificationService {
                         .qualifyingXpath(nodeXpath + "/" + qualifierMarker.getRelativeXPath().replaceAll("(\\[.*\\])", ""))
                         .domainXpath(nodeXpath)
                         .qualifyingRelativeXpath(qualifierMarker.getRelativeXPath())
+                        .isQualifier(true)
                         .build();
                 qualifierXpaths.add(qualifierMarkerData);
             }
@@ -124,12 +179,13 @@ public class MigQualificationService {
                 QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
                         .qualifyingXpath(nodeXpath + "/" + qualifier.getRelativeXPath().replaceAll("(\\[.*\\])", ""))
                         .domainXpath(nodeXpath)
+                        .isQualifier(true)
                         .build();
                 qualifierXpaths.add(qualifierMarkerData);
             }
         }
         for (Node child : node.getNodes()) {
-            getXpaths(child, qualifierXpaths, valueXpaths);
+            getXpaths(child, qualifierXpaths);
         }
 
     }
@@ -145,7 +201,8 @@ public class MigQualificationService {
     }
 
 
-    public void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths, Mig mig, QualifierMarkerData markerData) throws MigAutomationException {
+    public void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths,
+                            Mig mig, QualifierMarkerData markerData) throws MigAutomationException {
 
         QualifierMarker qualifierMarker = findQualifierMarker(sourceNode, markerData.getQualifyingRelativeXpath());
         String originalDomainXpath = sourceNode.getDomain().getXPath();
@@ -155,7 +212,19 @@ public class MigQualificationService {
         String domainGUID = generateGUID();
         String baseDomainGUID = generateGUID();
 
-        Codelist codeList = getCodeList("d96a", "2005");
+        Node correspondingNode = findSelectingNode(sourceNode, qualifierMarker.getRelativeXPath());
+        if (correspondingNode == null) {
+            throw new MigAutomationException("Could not find corresponding node for xPath: " + qualifierMarker.getRelativeXPath());
+        }
+
+        /**String version = ((String)((LinkedHashMap) mig.getMessageTemplate()).get("VersionId"))
+                .replaceAll(" S3", "")
+                .replaceAll("\\.", "")
+                .toLowerCase();*/
+
+        String version = ((String)((Map<String, ?>) mig.getMessageTemplate()).get("VersionId"));
+
+        Codelist codeList = getCodeList(version, correspondingNode.getId());
         Code code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst().get();
         String idDoc = code.getDocumentation().getName().getBaseArtifactValue().getId();
         String codelistdesc = codeList.getDocumentationArtifacts().get(idDoc);
@@ -185,6 +254,10 @@ public class MigQualificationService {
                         .unqualifiedDomainGUID(sourceNode.getBaseTypeDomain().getDomainGUID())
                         .domainGUID(baseDomainGUID)
                         .build());
+
+        if (sourceNode.getXMLNodeName().endsWith("]")) {
+            nodeBuilder = nodeBuilder.isOriginalNode(false);
+        }
 
         nodeBuilder = nodeBuilder
                 .nodeStatus(NodeStatus.builder()
@@ -236,7 +309,6 @@ public class MigQualificationService {
 
         List<Node> siblings = sourceNode.getParent().getNodes();
         int index = siblings.indexOf(sourceNode);
-        siblings.remove(index);
         siblings.add(index, targetNode);
         targetNode.setParent(sourceNode.getParent());
         populateParent(targetNode);
@@ -244,7 +316,8 @@ public class MigQualificationService {
 
         Node selectingNode = findSelectingNode(targetNode, qualifierMarker.getRelativeXPath());
         qualifyCorrespondingNode(selectingNode, code, codeList, targetNode.getQualifiers().get(0));
-        for (Node child : targetNode.getNodes()) {
+        List<Node> childrenNodes = new ArrayList<>(targetNode.getNodes());
+        for (Node child : childrenNodes) {
             qualifyChildrenNodes(child, qualiferPaths);
         }
     }
@@ -337,6 +410,7 @@ public class MigQualificationService {
                     .codelistReference(reference)
                     .build());
             sourceNode.setOverrideSimpleTypeCodelistReferences(true);
+            sourceNode.setIsSelected(true);
         }
 
         sourceNode.getSelectedCodelist().setSelectedCodes(Arrays.asList(code));
@@ -365,6 +439,9 @@ public class MigQualificationService {
             if (node.getDomain().getXPath().equals(xPath)) {
                 return node;
             }
+            if (node.getDomain().getXPath().replaceAll("\\[.*\\]", "").equals(xPath)) {
+                return node;
+            }
             Node foundNode = findNode(xPath, node.getNodes());
             if (foundNode != null) {
                 return foundNode;
@@ -379,23 +456,56 @@ public class MigQualificationService {
     }
 
     private Codelist getCodeList(String version, String codeListType) throws MigAutomationException {
-        String filePath = "codelists/" + version + "/" + codeListType + ".json";
+        String filePath = "./codelists/" + version + "/" + codeListType + ".json";
         File file = new File(filePath);
         if (!file.exists()) {
-            throw new MigAutomationException("Code list file not found: " + filePath);
+            try {
+                Codelist codelist = retrieveCodeList(version, codeListType);
+                Files.createDirectories(file.getParentFile().toPath());
+                mapper.writeValue(file, codelist);
+                return codelist;
+            } catch (IOException e) {
+                throw new MigAutomationException(e);
+            }
+            //throw new MigAutomationException("Code list file not found: " + filePath);
         }
         try {
             return this.mapper.readValue(file, Codelist.class);
         } catch (IOException e) {
             throw new MigAutomationException("Error while parsing CodeList", e);
         }
+    }
 
+    private Codelist retrieveCodeList(String version, String codeListType) {
+        String url = UriComponentsBuilder.fromUriString("/api/1.0/typesystems/UNEDIFACT/versions/{version}/codelists/{codeListType}")
+                .buildAndExpand(version, codeListType).encode()
+                .toUriString();
+        return restTemplate.getForObject(url, Codelist.class);
     }
 
     private void populateParent(Node node) {
         for (Node child : node.getNodes()) {
             child.setParent(node);
             populateParent(child);
+        }
+    }
+
+    private void getEndNodes(Node node, List<Node> results) {
+        if (node.getNodes().isEmpty()) {
+            results.add(node);
+        } else {
+            for (Node child : node.getNodes()) {
+                getEndNodes(child, results);
+            }
+        }
+    }
+
+    private void setSelectedParents(Node node) {
+        if (node.getIsSelected()) {
+            node.getParent().setIsSelected(true);
+        }
+        if (node.getParent() != null) {
+            setSelectedParents(node.getParent());
         }
     }
 

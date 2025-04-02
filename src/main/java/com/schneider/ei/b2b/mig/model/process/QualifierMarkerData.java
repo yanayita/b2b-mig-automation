@@ -14,5 +14,5 @@ public class QualifierMarkerData {
     private String domainXpath;
     private String qualifyingXpath;
     private String qualifyingRelativeXpath;
-
+    private boolean isQualifier;
 }

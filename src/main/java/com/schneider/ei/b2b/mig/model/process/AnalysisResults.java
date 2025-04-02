@@ -11,5 +11,6 @@ import java.util.Set;
 @NoArgsConstructor
 @SuperBuilder(toBuilder = true)
 public class AnalysisResults {
-    private Map<QualifierMarkerData, Set<String>> xPathsFound;
+    private Map<QualifierMarkerData, Set<String>> qualifierXPathsFound;
+    private Set<QualifierMarkerData> selectedXPathsFound;
 }

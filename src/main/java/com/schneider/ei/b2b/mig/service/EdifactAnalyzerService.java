@@ -48,6 +48,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,6 +111,7 @@ public class EdifactAnalyzerService {
         ExecutionContext executionContext = smooks.createExecutionContext();
 
         Map<QualifierMarkerData, Set<String>> xpathsFound = new HashMap<>();
+        Set<QualifierMarkerData> selectedXPathsFound = new LinkedHashSet<>();
 
         for (Path file : files) {
             try {
@@ -144,13 +146,17 @@ public class EdifactAnalyzerService {
                     XPathExpression expr = xPath.compile(correctedPath);
                     NodeList nodeList = (NodeList) expr.evaluate(doc, XPathConstants.NODESET);
 
-                    for (int i = 0; i < nodeList.getLength(); i++) {
-                        Element element = (Element) nodeList.item(i);
-                        Set<String> xpathSet = xpathsFound.computeIfAbsent(qualifyingMarker, k -> new HashSet<>());
-                        String elementValue = element.getFirstChild().getTextContent();
-                        if (StringUtils.isNotBlank(elementValue)) {
-                            xpathSet.add(elementValue);
+                    if (qualifyingMarker.isQualifier()) {
+                        for (int i = 0; i < nodeList.getLength(); i++) {
+                            Element element = (Element) nodeList.item(i);
+                            Set<String> xpathSet = xpathsFound.computeIfAbsent(qualifyingMarker, k -> new HashSet<>());
+                            String elementValue = element.getFirstChild().getTextContent();
+                            if (StringUtils.isNotBlank(elementValue)) {
+                                xpathSet.add(elementValue);
+                            }
                         }
+                    } else if (nodeList.getLength() > 0) {
+                        selectedXPathsFound.add(qualifyingMarker);
                     }
 
                 }
@@ -162,7 +168,8 @@ public class EdifactAnalyzerService {
             }
         }
         return AnalysisResults.builder()
-                .xPathsFound(xpathsFound)
+                .qualifierXPathsFound(xpathsFound)
+                .selectedXPathsFound(selectedXPathsFound)
                 .build();
     }
 
