@@ -61,7 +61,7 @@ public class MigQualificationService {
     @Autowired
     private EdifactAnalyzerService edifactAnalyzerService;
 
-    public void qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
+    public String qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
         try {
             // Test the qualifyNode method
             InputStream is = new FileInputStream(filePath);
@@ -76,27 +76,6 @@ public class MigQualificationService {
             var sortedResults =  analysisResults.getQualifierXPathsFound().entrySet().stream()
                     .sorted(Comparator.comparing((item) -> item.getKey().getDomainXpath()))
                     .toList();
-
-            for (Map.Entry<QualifierMarkerData, Set<String>> entry : sortedResults) {
-                QualifierMarkerData qualifierMarkerData = entry.getKey();
-                String xPathDomain = qualifierMarkerData.getDomainXpath();
-                Set<String> values = entry.getValue();
-                Node sourceNode = findNode(xPathDomain, inputNodes);
-                if (sourceNode != null) {
-                    if (isQualifyingNodeUsed(sourceNode)) {
-                        continue;
-                    }
-                    for (String value : values) {
-                        qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
-                    }
-                    List<Node> siblings = sourceNode.getParent().getNodes();
-                    siblings.remove(sourceNode);
-                } else {
-                    throw new MigAutomationException("Node not found for xPath: " + xPathDomain);
-                }
-            }
-
-            mig.setQualifiers(qualiferPaths.values().stream().toList());
 
             for (QualifierMarkerData qualifierMarkerData : analysisResults.getSelectedXPathsFound()) {
                 Node foundNode = findNode(qualifierMarkerData.getDomainXpath(), inputNodes);
@@ -117,9 +96,33 @@ public class MigQualificationService {
                 setSelectedParents(node);
             }
 
+            for (Map.Entry<QualifierMarkerData, Set<String>> entry : sortedResults) {
+                QualifierMarkerData qualifierMarkerData = entry.getKey();
+                String xPathDomain = qualifierMarkerData.getDomainXpath();
+                Set<String> values = entry.getValue();
+                Node sourceNode = findNode(xPathDomain, inputNodes);
+                if (sourceNode != null) {
+                    if (isQualifyingNodeUsed(sourceNode)) {
+                        sourceNode.setIsSelected(true);
+                        continue;
+                    }
+                    for (String value : values) {
+                        qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
+                    }
+                    List<Node> siblings = sourceNode.getParent().getNodes();
+                    siblings.remove(sourceNode);
+                } else {
+                    throw new MigAutomationException("Node not found for xPath: " + xPathDomain);
+                }
+            }
+
+            mig.setQualifiers(qualiferPaths.values().stream().toList());
+
+
+
 
             String outputMig = mapper.writeValueAsString(mig);
-            System.out.println(outputMig);
+            return outputMig;
 
 
         } catch (IOException e) {
@@ -157,6 +160,7 @@ public class MigQualificationService {
         String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
         if (node.getNodes().isEmpty()) {
             QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
+                    .domainXpath(nodeXpath)
                     .qualifyingXpath(nodeXpath)
                     .isQualifier(false)
                     .build();
@@ -501,12 +505,13 @@ public class MigQualificationService {
     }
 
     private void setSelectedParents(Node node) {
+        if (node.getParent() == null) {
+            return;
+        }
         if (node.getIsSelected()) {
             node.getParent().setIsSelected(true);
         }
-        if (node.getParent() != null) {
-            setSelectedParents(node.getParent());
-        }
+        setSelectedParents(node.getParent());
     }
 
     private Node findSelectingNode(Node sourceNode, String xPath) throws MigAutomationException {

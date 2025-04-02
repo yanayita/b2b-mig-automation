@@ -4,6 +4,7 @@ target/
 !**/src/test/**/target/
 temporary
 .smooks
+tmp
 
 ### IntelliJ IDEA ###
 .idea/modules.xml

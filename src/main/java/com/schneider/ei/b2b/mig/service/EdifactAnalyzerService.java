@@ -7,6 +7,7 @@ import io.xlate.edi.stream.EDIInputFactory;
 import io.xlate.edi.stream.EDIStreamEvent;
 import io.xlate.edi.stream.EDIStreamReader;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.example.EdifactInfo;
 import org.example.Main;
 import org.smooks.Smooks;
@@ -14,6 +15,7 @@ import org.smooks.api.ExecutionContext;
 import org.smooks.api.resource.config.ResourceConfig;
 import org.smooks.cartridges.edifact.EdifactReaderConfigurator;
 import org.smooks.engine.DefaultApplicationContextBuilder;
+import org.smooks.engine.resource.config.DefaultResourceConfig;
 import org.smooks.engine.resource.config.DefaultResourceConfigFactory;
 import org.smooks.io.sink.JavaSink;
 import org.smooks.io.sink.WriterSink;
@@ -22,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
@@ -52,6 +55,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -103,11 +108,14 @@ public class EdifactAnalyzerService {
     };
 
     public AnalysisResults parseEdifactFiles(String parentFolder, Set<QualifierMarkerData> qualifyingXPaths) throws MigAutomationException {
-        List<Path> files =  listFilesUsingFileWalk(parentFolder);
+        List<Path> files =  this.migUtils.listFilesUsingFileWalk(parentFolder);
         String version = determineEdifactVersionMultiple(files);
 
         Smooks smooks = new Smooks(new DefaultApplicationContextBuilder().withClassLoader(Main.class.getClassLoader()).build());
-        smooks.setReaderConfig(new EdifactReaderConfigurator("/" + version + "/EDIFACT-Messages.dfdl.xsd").setMessageTypes(Arrays.asList("ORDERS", "ORDRSP", "INVOIC", "DESADV")));
+        EdifactReaderConfigurator configurator = new EdifactReaderConfigurator("/" + version + "/EDIFACT-Messages.dfdl.xsd")
+                .setMessageTypes(Arrays.asList("ORDERS", "ORDRSP", "INVOIC", "DESADV"));
+        configurator.setCacheOnDisk(true);
+        smooks.setReaderConfig(configurator);
         ExecutionContext executionContext = smooks.createExecutionContext();
 
         Map<QualifierMarkerData, Set<String>> xpathsFound = new HashMap<>();
@@ -127,21 +135,28 @@ public class EdifactAnalyzerService {
                 XPath xPath = XPathFactory.newInstance().newXPath();
 
                 xPath.setNamespaceContext(this.namespaceContext);
+                Pattern pattern = Pattern.compile("(.*)_(\\d+)");
 
                 for (QualifierMarkerData qualifyingMarker : qualifyingXPaths) {
-                    /**String[] pathTokens = qualifyingXPath.replaceAll("(.*):Interchange", "D96A:Interchange").split("/");
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < pathTokens.length; i++) {
-                        if (pathTokens[i].contains(":")) {
-                            String[] tokens = pathTokens[i].split(":");
-                            pathTokens[i] = tokens[1];
-                        }
-                    }*/
+                    if (!qualifyingMarker.isQualifier() && selectedXPathsFound.contains(qualifyingMarker)) {
+                        continue;
+                    }
+
                     String correctedPath = qualifyingMarker.getQualifyingXpath()
                             .replaceAll("(.*):Interchange", version.toUpperCase() + ":Interchange")
                             .replaceAll("/(\\d)", "/E$1")
                             .replaceAll("/ORDERS/", "/" + version.toUpperCase() + ":Message/" + version.toUpperCase() + ":ORDERS/")
-                            .replaceAll("/SG", "/SegGrp-");
+                            .replaceAll("/SG", "/SegGrp-")
+                            .replaceAll("/D96A:ORDERS/UNH/", "/UNH/");
+                            //.replaceAll("(.*)_(\\d+)", "$1[$2]");
+
+
+                    Matcher matcher = pattern.matcher(correctedPath);
+                    if (matcher.find()) {
+                        Integer index = NumberUtils.createInteger(matcher.group(2));
+                        index--;
+                        correctedPath = matcher.group(1) + "[" + index + "]";
+                    }
 
                     XPathExpression expr = xPath.compile(correctedPath);
                     NodeList nodeList = (NodeList) expr.evaluate(doc, XPathConstants.NODESET);
@@ -157,12 +172,10 @@ public class EdifactAnalyzerService {
                         }
                     } else if (nodeList.getLength() > 0) {
                         selectedXPathsFound.add(qualifyingMarker);
+                        //checkNextSibling(nodeList.item(0), selectedXPathsFound, qualifyingMarker);
                     }
 
                 }
-
-
-
             } catch (IOException | ParserConfigurationException | SAXException | XPathExpressionException e) {
                 throw new MigAutomationException("Error processing file: " + file, e);
             }
@@ -173,16 +186,24 @@ public class EdifactAnalyzerService {
                 .build();
     }
 
-
-    private List<Path> listFilesUsingFileWalk(String dir) throws MigAutomationException {
-        try (Stream<Path> stream = Files.walk(Paths.get(dir))) {
-            return stream
-                    .filter(file -> !Files.isDirectory(file))
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new MigAutomationException("Error reading files from directory: " + dir, e);
+    private void checkNextSibling(Node node, Set<QualifierMarkerData> selectedXPathsFound, QualifierMarkerData qualifyingMarker) {
+        Node nextSibling = node.getNextSibling();
+        int index = 2;
+        while(nextSibling != null && StringUtils.equals(nextSibling.getNodeName(), node.getNodeName())) {
+            selectedXPathsFound.add(qualifyingMarker.toBuilder()
+                    .qualifyingRelativeXpath(qualifyingMarker.getQualifyingRelativeXpath() + "_" + index)
+                    .domainXpath(qualifyingMarker.getDomainXpath() + "_" + index)
+                    .build());
+            index++;
+            if (index > 10) {
+                break;
+            }
+            nextSibling = nextSibling.getNextSibling();
         }
     }
+
+
+
 
     public String determineEdifactVersionMultiple(List<Path> files) throws MigAutomationException {
         Set<String> versionsFound = new HashSet<>();

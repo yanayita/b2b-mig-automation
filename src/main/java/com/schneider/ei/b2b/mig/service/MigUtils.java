@@ -1,12 +1,19 @@
 package com.schneider.ei.b2b.mig.service;
 
+import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.migs.Node;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class MigUtils {
@@ -34,6 +41,16 @@ public class MigUtils {
             }
         }
         return null;
+    }
+
+    public List<Path> listFilesUsingFileWalk(String dir) throws MigAutomationException {
+        try (Stream<Path> stream = Files.walk(Paths.get(dir))) {
+            return stream
+                    .filter(file -> !Files.isDirectory(file))
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new MigAutomationException("Error reading files from directory: " + dir, e);
+        }
     }
 
     public String getXPath(Element element) {
