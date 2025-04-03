@@ -154,14 +154,7 @@ public class EdifactAnalyzerService {
                         continue;
                     }
 
-                    String correctedPath = qualifyingMarker.getQualifyingXpath()
-                            .replaceAll("(.*):Interchange", version.toUpperCase() + ":Interchange")
-                            .replaceAll("/(\\d)", "/E$1")
-                            .replaceAll("/(ORDERS|ORDRSP|INVOIC|DESADV)/", "/" + version.toUpperCase() + ":Message/" + version.toUpperCase() + ":$1/")
-                            .replaceAll("/SG", "/SegGrp-")
-                            .replaceAll("/D96A:(ORDERS|ORDRSP|INVOIC|DESADV)/UNH/", "/UNH/");
-                            //.replaceAll("(.*)_(\\d+)", "$1[$2]");
-
+                    String correctedPath = correctPath(qualifyingMarker, version);
 
                     Matcher matcher = pattern.matcher(correctedPath);
                     if (matcher.find()) {
@@ -182,6 +175,21 @@ public class EdifactAnalyzerService {
                                 xpathSet.add(elementValue);
                             }
                         }
+                        QualifierMarkerData alternateQualifyingMarker = QualifierMarkerData.builder()
+                                .domainXpath(qualifyingMarker.getDomainXpath())
+                                .qualifyingXpath(qualifyingMarker.getDomainXpath())
+                                .isQualifier(false)
+                                .build();
+
+                        if (!selectedXPathsFound.contains(alternateQualifyingMarker)) {
+                            correctedPath = correctPath(alternateQualifyingMarker, version);
+                            expr = xPath.compile(correctedPath);
+                            nodeList = (NodeList) expr.evaluate(doc, XPathConstants.NODESET);
+                            if (nodeList.getLength() > 0) {
+                                selectedXPathsFound.add(alternateQualifyingMarker);
+                            }
+
+                        }
                     } else if (nodeList.getLength() > 0) {
                         selectedXPathsFound.add(qualifyingMarker);
                         //checkNextSibling(nodeList.item(0), selectedXPathsFound, qualifyingMarker);
@@ -196,6 +204,15 @@ public class EdifactAnalyzerService {
                 .qualifierXPathsFound(xpathsFound)
                 .selectedXPathsFound(selectedXPathsFound)
                 .build();
+    }
+
+    private String correctPath(QualifierMarkerData qualifierMarker, String version) {
+        return qualifierMarker.getQualifyingXpath()
+                .replaceAll("(.*):Interchange", version.toUpperCase() + ":Interchange")
+                .replaceAll("/(\\d)", "/E$1")
+                .replaceAll("/(ORDERS|ORDRSP|INVOIC|DESADV)/", "/" + version.toUpperCase() + ":Message/" + version.toUpperCase() + ":$1/")
+                .replaceAll("/SG", "/SegGrp-")
+                .replaceAll("/D96A:(ORDERS|ORDRSP|INVOIC|DESADV)/UNH/", "/UNH/");
     }
 
     private void checkNextSibling(Node node, Set<QualifierMarkerData> selectedXPathsFound, QualifierMarkerData qualifyingMarker) {

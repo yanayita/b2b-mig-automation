@@ -155,7 +155,7 @@ public class MigQualificationService {
 
     public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths) {
         String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
-        if (true) {
+        if (node.getNodes().isEmpty() && node.getQualifierMarkers().isEmpty() && node.getQualifiers().isEmpty()) {
             QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
                     .domainXpath(nodeXpath)
                     .qualifyingXpath(nodeXpath)
@@ -229,6 +229,9 @@ public class MigQualificationService {
         Optional<Code> code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst();
         if (code.isEmpty()) {
             log.error("Code not found in code list {} - value {}. Skipping node qualification", correspondingNode.getId(), value);
+            Node newNode = findNode(sourceNode.getDomain().getXPath(), sourceNode.getParent().getNodes());
+            newNode.setIsSelected(true);
+            qualifyChildrenNodes(newNode, qualiferPaths);
             return;
         }
 

@@ -2,6 +2,7 @@ package com.schneider.ei.b2b.mig.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.zafarkhaja.semver.Version;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.codelists.Code;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
@@ -88,7 +89,7 @@ public class MigFileService {
         }
 
         long modifiedTime = System.currentTimeMillis();
-
+        String newVersion;
         try {
             InputStream inputStream = new FileInputStream(manifestFile.toFile());
             Manifest manifest = mapper.readValue(inputStream, Manifest.class);
@@ -96,12 +97,16 @@ public class MigFileService {
             if (manifest.getValue().getMigs().size() != 1) {
                 throw new MigAutomationException("Only one MIG file is supported.");
             }
-            /*Mig mig = manifest.getValue().getMigs().get(0);
-            mig.getAdministrativeData().setModifiedOn(modifiedTime);
+            Mig mig = manifest.getValue().getMigs().get(0);
+            String migVersion  = mig.getVersionId();
+            Version v = Version.parse(migVersion, false);
+            newVersion = v.majorVersion() + "." +  (v.minorVersion() + 1);
+            mig.setVersionId(newVersion);
+            //mig.getAdministrativeData().setModifiedOn(modifiedTime);
             DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(manifestFile.toFile(), false));
             outputStream.write(mapper.writeValueAsString(manifest).getBytes());
             outputStream.close();
-            */
+
         } catch (IOException e) {
             throw new MigAutomationException("Error reading manifest file: " + manifestFile, e);
         }
@@ -110,7 +115,8 @@ public class MigFileService {
         AnalysisResults results = edifactAnalyzerService.parseEdifactFiles(ediSamplesFolder, qualifyingXpaths);
         com.schneider.ei.b2b.mig.model.migs.Mig outputMig = migQualificationService.qualifyMig(migFile.toString(), results);
         outputMig.getAdministrativeData().setModifiedOn(modifiedTime);
-
+        Map<String, String> identification = outputMig.getIdentification();
+        identification.put("MIGVersion", newVersion);
 
         try {
             String outputMigContents = mapper.writeValueAsString(outputMig);

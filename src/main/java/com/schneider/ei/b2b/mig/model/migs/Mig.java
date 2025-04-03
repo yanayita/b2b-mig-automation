@@ -27,7 +27,7 @@ public class Mig {
     @JsonProperty("ArtifactMetadata")
     private ArtifactMetadata artifactMetadata;
     @JsonProperty("Identification")
-    private Object identification;
+    private Map<String, String> identification;
     @JsonProperty("EnvelopeIdentification")
     private Object envelopeIdentification;
     @JsonProperty("EnvelopeVertexGUID")
