@@ -5,10 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.codelists.Code;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
+import com.schneider.ei.b2b.mig.model.manifest.Manifest;
+import com.schneider.ei.b2b.mig.model.manifest.Mig;
 import com.schneider.ei.b2b.mig.model.migs.ArtifactValue;
 import com.schneider.ei.b2b.mig.model.migs.CodelistReference;
 import com.schneider.ei.b2b.mig.model.migs.Domain;
-import com.schneider.ei.b2b.mig.model.migs.Mig;
 import com.schneider.ei.b2b.mig.model.migs.Node;
 import com.schneider.ei.b2b.mig.model.migs.NodeStatus;
 import com.schneider.ei.b2b.mig.model.migs.Properties;
@@ -86,11 +87,33 @@ public class MigFileService {
             throw new MigAutomationException("Manifest or MIG file not found in the zip.");
         }
 
-        Set<QualifierMarkerData> qualifyingXpaths = migQualificationService.getQualifierXPaths(migFile.toString());
-        AnalysisResults results = edifactAnalyzerService.parseEdifactFiles(ediSamplesFolder, qualifyingXpaths);
-        String outputMigContents = migQualificationService.qualifyMig(migFile.toString(), results);
+        long modifiedTime = System.currentTimeMillis();
 
         try {
+            InputStream inputStream = new FileInputStream(manifestFile.toFile());
+            Manifest manifest = mapper.readValue(inputStream, Manifest.class);
+            inputStream.close();
+            if (manifest.getValue().getMigs().size() != 1) {
+                throw new MigAutomationException("Only one MIG file is supported.");
+            }
+            /*Mig mig = manifest.getValue().getMigs().get(0);
+            mig.getAdministrativeData().setModifiedOn(modifiedTime);
+            DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(manifestFile.toFile(), false));
+            outputStream.write(mapper.writeValueAsString(manifest).getBytes());
+            outputStream.close();
+            */
+        } catch (IOException e) {
+            throw new MigAutomationException("Error reading manifest file: " + manifestFile, e);
+        }
+
+        Set<QualifierMarkerData> qualifyingXpaths = migQualificationService.getQualifierXPaths(migFile.toString());
+        AnalysisResults results = edifactAnalyzerService.parseEdifactFiles(ediSamplesFolder, qualifyingXpaths);
+        com.schneider.ei.b2b.mig.model.migs.Mig outputMig = migQualificationService.qualifyMig(migFile.toString(), results);
+        outputMig.getAdministrativeData().setModifiedOn(modifiedTime);
+
+
+        try {
+            String outputMigContents = mapper.writeValueAsString(outputMig);
             DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(migFile.toFile(), false));
             outputStream.write(outputMigContents.getBytes());
             outputStream.close();

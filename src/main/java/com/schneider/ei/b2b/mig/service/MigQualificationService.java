@@ -64,7 +64,7 @@ public class MigQualificationService {
     @Autowired
     private EdifactAnalyzerService edifactAnalyzerService;
 
-    public String qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
+    public Mig qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
         try {
             // Test the qualifyNode method
             InputStream is = new FileInputStream(filePath);
@@ -120,14 +120,8 @@ public class MigQualificationService {
             }
 
             mig.setQualifiers(qualiferPaths.values().stream().toList());
-            mig.getAdministrativeData().setModifiedOn(System.currentTimeMillis());
 
-
-
-            String outputMig = mapper.writeValueAsString(mig);
-            return outputMig;
-
-
+            return mig;
         } catch (IOException e) {
             throw new MigAutomationException("Error while reading file: " + filePath, e);
         }
@@ -136,7 +130,7 @@ public class MigQualificationService {
     private boolean isQualifyingNodeUsed(Node node) throws MigAutomationException {
         for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
             Node foundNode = findSelectingNode(node, qualifierMarker.getRelativeXPath());
-            if (foundNode.getSelectedCodelist() != null && !foundNode.getSelectedCodelist().getSelectedCodes().isEmpty()) {
+            if (foundNode.getSelectedCodelist() != null && !foundNode.getSelectedCodelist().getSelectedCodes().isEmpty() && !qualifierMarker.getQualifierType().equals("Peer")) {
                 return true;
             }
         }
@@ -161,7 +155,7 @@ public class MigQualificationService {
 
     public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths) {
         String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
-        if (node.getNodes().isEmpty()) {
+        if (true) {
             QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
                     .domainXpath(nodeXpath)
                     .qualifyingXpath(nodeXpath)
@@ -214,7 +208,12 @@ public class MigQualificationService {
         QualifierMarker qualifierMarker = findQualifierMarker(sourceNode, markerData.getQualifyingRelativeXpath());
         String originalDomainXpath = sourceNode.getDomain().getXPath();
         String newDomainXpath = originalDomainXpath + "[" + qualifierMarker.getRelativeXPath() + "=" + value + "]";
-        String xmlNodeName = sourceNode.getXMLNodeName() + "_gq_" + value;
+        String xmlNodeName;
+        if (qualifierMarker.getQualifierType().equals("Peer")) {
+            xmlNodeName = sourceNode.getXMLNodeName() + "_pq_" + value;
+        } else {
+            xmlNodeName = sourceNode.getXMLNodeName() + "_gq_" + value;
+        }
 
         String domainGUID = generateGUID();
         String baseDomainGUID = generateGUID();
@@ -223,11 +222,6 @@ public class MigQualificationService {
         if (correspondingNode == null) {
             throw new MigAutomationException("Could not find corresponding node for xPath: " + qualifierMarker.getRelativeXPath());
         }
-
-        /**String version = ((String)((LinkedHashMap) mig.getMessageTemplate()).get("VersionId"))
-                .replaceAll(" S3", "")
-                .replaceAll("\\.", "")
-                .toLowerCase();*/
 
         String version = ((String)((Map<String, ?>) mig.getMessageTemplate()).get("VersionId"));
 
@@ -277,7 +271,6 @@ public class MigQualificationService {
                         .comment("")
                         .build())
                 .qualifierMarkers(Collections.emptyList())
-                //TODO: handle multiple values? or should only be one value?
                 .qualifiers(Arrays.asList(Qualifier.builder()
                         .qualifierValues(Collections.singletonList(QualifierValue.builder()
                                 .vertexGUID(generateGUID())
@@ -300,14 +293,7 @@ public class MigQualificationService {
                 .qualifyingValue(value)
                 .build();
         qualiferPaths.put(qualifierPath.getKey(), qualifierPath);
-        // Set properties values accordingly
-        /**
-         targetNode.getProperties().getSequenceNumber().setArtifactValue(ArtifactValue.builder()
-         .vertexGUID(generateGUID())
-         .id("1.001")
-         .action("NONE")
-         .build());
-         */
+
         // Create new description contatenating current text and code list text  and set new Name artifact value
         String nodeName = mig.getDocumentationArtifacts().get(targetNode.getDocumentation().getName().getBaseArtifactValue().getId()) + " - " + codelistdesc;
         String nodeNameGUID = generateGUID();
