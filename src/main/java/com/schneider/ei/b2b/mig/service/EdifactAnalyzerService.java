@@ -221,11 +221,14 @@ public class EdifactAnalyzerService {
         Set<String> versionsFound = new HashSet<>();
         for (Path path : files) {
             EdifactInfo edifactInfo = determineEdifactVersion(path.toFile().getPath());
+            edifactInfo.setFolder(path.toFile().getParentFile().getPath());
             String version = edifactInfo.getVersion();
             if (!EDIFACT_VERSIONS.contains(version)) {
                 throw new MigAutomationException("Unsupported EDIFACT version: " + version);
             }
-            versionsFound.add(edifactInfo.getVersion());
+            if (versionsFound.add(edifactInfo.getVersion())) {
+                log.info("EDIFACT version found: " + edifactInfo.getVersion() + " in folder: " + edifactInfo.getFolder());
+            }
         }
         if (versionsFound.size() > 1) {
             throw new MigAutomationException("Multiple EDIFACT versions found: " + versionsFound);

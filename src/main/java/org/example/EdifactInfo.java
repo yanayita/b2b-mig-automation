@@ -11,6 +11,7 @@ public class EdifactInfo {
     private String E0065;
     private String E0052;
     private String E0054;
+    private String folder;
 
     public String getMessageType() {
         return this.E0065;

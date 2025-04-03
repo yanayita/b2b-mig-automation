@@ -83,6 +83,30 @@
         </dependency>
         <dependency>
             <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>edifact-schemas</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+            <classifier>d93a</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>edifact-schemas</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+            <classifier>d96b</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>edifact-schemas</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+            <classifier>d97a</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
+            <artifactId>edifact-schemas</artifactId>
+            <version>${smooks.edifact.cartridge.version}</version>
+            <classifier>d99b</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.smooks.cartridges.edi</groupId>
             <artifactId>d96a-edifact-binding</artifactId>
             <version>${smooks.edifact.cartridge.version}</version>
         </dependency>
