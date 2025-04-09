@@ -451,9 +451,8 @@ public class MigQualificationService {
         return null;
     }
 
-    public static String generateGUID() {
-        UUID uuid = UUID.randomUUID();
-        return uuid.toString().replace("-", "");
+    public String generateGUID() {
+        return MigUtils.generateGUID();
     }
 
     private Codelist getCodeList(String version, String codeListType) throws MigAutomationException {

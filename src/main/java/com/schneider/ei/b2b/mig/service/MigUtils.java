@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 @Service
 public class MigUtils {
 
-    public String generateGUID() {
+    public static String generateGUID() {
         UUID uuid = UUID.randomUUID();
         return uuid.toString().replace("-", "");
     }
