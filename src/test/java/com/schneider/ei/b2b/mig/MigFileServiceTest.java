@@ -25,11 +25,11 @@ public class MigFileServiceTest {
     public void testProcessMigZipMultiple() throws MigAutomationException {
         String ediSamplesPath = "./TOP50Customers/Partners/WINDMOELLER & HOELSCHER KG/ORDERS";
         String zipPath = "./src/test/resources/test_01/MIG-EDI-01A WINDMOELLER-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE.zip";
-        migFileService.processMigZip(zipPath, ediSamplesPath);
-
-        //ediSamplesPath = "./TOP50Customers/Partners/WINDMOELLER & HOELSCHER KG/ORDRSP";
-        //zipPath = "./src/test/resources/test_01/MIG-EDI-01A WINDMOELLER-GERMANY - UNEDIFACT D.96A ORDRSP–TARGET.zip";
         //migFileService.processMigZip(zipPath, ediSamplesPath);
+
+        ediSamplesPath = "./TOP50Customers/Partners/WINDMOELLER & HOELSCHER KG/ORDRSP";
+        zipPath = "./src/test/resources/test_01/MIG-EDI-01A WINDMOELLER-GERMANY - UNEDIFACT D.96A ORDRSP–TARGET.zip";
+        migFileService.processMigZip(zipPath, ediSamplesPath);
 
         //MIG-EDI-01A WINDMOELLER-GERMANY - UN/EDIFACT D.96A ORDERS–SOURCE
         //MIG-EDI-02 ELEKTRO BRAUN - UN/EDIFACT D.96A DESADV – TARGET
@@ -47,5 +47,23 @@ public class MigFileServiceTest {
         zipPath = "./src/test/resources/test_01/MIG-EDI-01A RS COMPONENTS-GERMANY - UNEDIFACT D.97A INVOIC–TARGET.zip";
         migFileService.processMigZip(zipPath, ediSamplesPath);
          */
+    }
+
+    @Test
+    public void testCreateMigAndQualify() throws MigAutomationException {
+        this.migFileService.createMigAndQualify("ORDERS", "D.96A S3",
+                "MIG-EDI-01A RS COMPONENTS-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE (ED)_2",
+                "./TOP50Customers/Partners/RS COMPONENTS/ORDERS");
+    }
+
+    @Test
+    public void testProcessMigZipMultiple2() throws MigAutomationException {
+        String ediSamplesPath = "./TOP50Customers/Partners/WINDMOELLER & HOELSCHER KG/ORDERS";
+        String zipPath = "./src/test/resources/test_01/MIG-EDI-01A WINDMOELLER-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE.zip";
+        //migFileService.processMigZip(zipPath, ediSamplesPath);
+
+        ediSamplesPath = "./TOP50Customers/Partners/RS COMPONENTS/ORDERS";
+        zipPath = "./output/MIG-EDI-01A RS COMPONENTS-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE (ED).zip";
+        migFileService.processMigZip(zipPath, ediSamplesPath);
     }
 }

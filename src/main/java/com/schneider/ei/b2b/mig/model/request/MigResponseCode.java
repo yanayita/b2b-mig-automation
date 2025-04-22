@@ -1,0 +1,21 @@
+
+package com.schneider.ei.b2b.mig.model.request;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@Data
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
+public class MigResponseCode {
+
+    @JsonProperty("responseCode")
+    private int responseCode;
+
+}

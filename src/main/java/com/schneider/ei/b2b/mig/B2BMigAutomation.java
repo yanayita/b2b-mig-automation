@@ -61,8 +61,8 @@ public class B2BMigAutomation {
     @Bean
     public CloseableHttpClient httpClient()  {
         RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.ofSeconds(30))
-                .setResponseTimeout(Timeout.ofSeconds(30))
+                .setConnectionRequestTimeout(Timeout.ofSeconds(60))
+                .setResponseTimeout(Timeout.ofSeconds(60))
                 .build();
 
         CookieStore cs = new BasicCookieStore();

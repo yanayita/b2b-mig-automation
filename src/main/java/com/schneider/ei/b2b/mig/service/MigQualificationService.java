@@ -1,9 +1,7 @@
 package com.schneider.ei.b2b.mig.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.codelists.Code;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
@@ -25,7 +23,6 @@ import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -45,8 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -61,25 +56,34 @@ public class MigQualificationService {
     @Autowired
     private MigUtils migUtils;
 
-    @Autowired
-    private EdifactAnalyzerService edifactAnalyzerService;
-
+    /**
+     * Qualifies the MIG file based on the provided analysis results.
+     * @param filePath File Path
+     * @param analysisResults Analysis Results
+     * @return Qualified MIG model
+     * @throws MigAutomationException ex
+     */
     public Mig qualifyMig(String filePath, AnalysisResults analysisResults) throws MigAutomationException {
         try {
-            // Test the qualifyNode method
+            // open the file and read the content as Mig object
             InputStream is = new FileInputStream(filePath);
             Mig mig = mapper.readValue(is, Mig.class);
             List<Node> inputNodes = mig.getNodes();
+            // for each of the input nodes, populate the parent field of each recursively
             for (Node nodes : inputNodes) {
                 migUtils.populateParent(nodes);
             }
+
+            // Build a Map with all the qualifiers in the Qualifiers section, indexed by key
             LinkedHashMap<String, QualifierPath> qualiferPaths = new LinkedHashMap<>();
             mig.getQualifiers().forEach(item -> qualiferPaths.put(item.getKey(), item));
 
+            // Sort the analysis results based on the domain xPath, to process them alphabetically
             var sortedResults =  analysisResults.getQualifierXPathsFound().entrySet().stream()
                     .sorted(Comparator.comparing((item) -> item.getKey().getDomainXpath()))
                     .toList();
 
+            // for each present paths coming from the Analysis Results of the EDI payloads, if they are present in the MIG, mark them as selected
             for (QualifierMarkerData qualifierMarkerData : analysisResults.getSelectedXPathsFound()) {
                 Node foundNode = findNode(qualifierMarkerData.getDomainXpath(), inputNodes);
                 if (foundNode != null){
@@ -91,6 +95,7 @@ public class MigQualificationService {
                 }
             }
 
+            // for any node that is selected, mark all its parents as selected as well so that the tree is consistent
             List<Node> endNodes = new ArrayList<>();
             for (Node node : inputNodes) {
                 getEndNodes(node, endNodes);
@@ -99,19 +104,25 @@ public class MigQualificationService {
                 setSelectedParents(node);
             }
 
+            // for each of the Qualifier Markers coming from the Analysis Results of the EDI payloads, process the qualifier
             for (Map.Entry<QualifierMarkerData, Set<String>> entry : sortedResults) {
                 QualifierMarkerData qualifierMarkerData = entry.getKey();
                 String xPathDomain = qualifierMarkerData.getDomainXpath();
                 Set<String> values = entry.getValue();
+                // try to find the node that corresponds to the xPath from the analysis results
                 Node sourceNode = findNode(xPathDomain, inputNodes);
                 if (sourceNode != null) {
+                    // first check if teh qualifying node is already used, if so, set it as selected and skip it
                     if (isQualifyingNodeUsed(sourceNode)) {
                         sourceNode.setIsSelected(true);
                         continue;
                     }
+
+                    // for each value found in the analysis results, for this qualifying path qualify the node
                     for (String value : values) {
                         qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
                     }
+                    // the previous will create a clone node, after done, remove the original unqualified node
                     List<Node> siblings = sourceNode.getParent().getNodes();
                     siblings.remove(sourceNode);
                 } else {
@@ -119,6 +130,7 @@ public class MigQualificationService {
                 }
             }
 
+            // update the MIG object with the new qualified nodes found during Qualification
             mig.setQualifiers(qualiferPaths.values().stream().toList());
 
             return mig;
@@ -127,9 +139,20 @@ public class MigQualificationService {
         }
     }
 
+    /**
+     * Check if the qualifying node is already used.
+     * @param node Node
+     * @return boolean
+     * @throws MigAutomationException ex
+     */
     private boolean isQualifyingNodeUsed(Node node) throws MigAutomationException {
+        // iterate through all qualifier markers
         for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
+            // Find the corresponding selecting Node that holds the value
             Node foundNode = findSelectingNode(node, qualifierMarker.getRelativeXPath());
+            // if the node already has a selected codelist and the selected codes are not empty, return true (except for Peer qualifier markers)
+            // For Group qualifiers, it would generate an error to have the same qualifying nodes selected multiple times.
+            // Since we're processing the paths in order, normally the high level nodes will be qualified first over nodes lower in the tree
             if (foundNode.getSelectedCodelist() != null && !foundNode.getSelectedCodelist().getSelectedCodes().isEmpty() && !qualifierMarker.getQualifierType().equals("Peer")) {
                 return true;
             }
@@ -137,12 +160,20 @@ public class MigQualificationService {
         return false;
     }
 
+    /**
+     * Get the xPaths of the Qualifier Markers and standard nodes from the MIG file.
+     * @param filePath File Path
+     * @return Set of QualifierMarkerData
+     * @throws MigAutomationException ex
+     */
     public Set<QualifierMarkerData> getQualifierXPaths(String filePath) throws MigAutomationException {
         try {
+            // open the MIG file and read the content as Mig object
             InputStream is = new FileInputStream(filePath);
             Mig rootNodeInput = mapper.readValue(is, Mig.class);
             List<Node> nodes = rootNodeInput.getNodes();
             Set<QualifierMarkerData> qualifierXpaths = new LinkedHashSet<>();
+            // get the xPaths of all the nodes
             for (Node node : nodes) {
                 getXpaths(node, qualifierXpaths);
             }
@@ -153,8 +184,15 @@ public class MigQualificationService {
         }
     }
 
-    public void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths) {
+    /**
+     * Get the xPaths of the Qualifier Markers and standard nodes from the children nodes.
+     * @param node Node
+     * @param qualifierXpaths Set of QualifierMarkerData
+     */
+    private void getXpaths(Node node, Set<QualifierMarkerData> qualifierXpaths) {
+        // remove from the Domain Xpath any specific qualifying value
         String nodeXpath = node.getDomain().getXPath().replaceAll("(\\[.*\\])", "");
+        // if the node has no children and no qualifiers, add it to the list of qualifierXpaths with isQualifier=false
         if (node.getNodes().isEmpty() && node.getQualifierMarkers().isEmpty() && node.getQualifiers().isEmpty()) {
             QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
                     .domainXpath(nodeXpath)
@@ -163,6 +201,8 @@ public class MigQualificationService {
                     .build();
             qualifierXpaths.add(qualifierMarkerData);
         }
+
+        // if the node contains Qualifier Markers, add them to the list of qualifierXpaths with isQualifier=true
         if (!node.getQualifierMarkers().isEmpty()) {
             for (QualifierMarker qualifierMarker : node.getQualifierMarkers()) {
                 QualifierMarkerData qualifierMarkerData = QualifierMarkerData.builder()
@@ -174,6 +214,8 @@ public class MigQualificationService {
                 qualifierXpaths.add(qualifierMarkerData);
             }
         }
+
+        // if the node contains Qualifier, add them to the list of qualifierXpaths with isQualifier=true
         if (!node.getQualifiers().isEmpty()) {
             for (Qualifier qualifier : node.getQualifiers()) {
 
@@ -185,12 +227,20 @@ public class MigQualificationService {
                 qualifierXpaths.add(qualifierMarkerData);
             }
         }
+
+        // recursively call this method for each child node
         for (Node child : node.getNodes()) {
             getXpaths(child, qualifierXpaths);
         }
 
     }
 
+    /**
+     * Find the Qualifier Marker in the source node based on the xPath.
+     * @param sourceNode Source Node
+     * @param xPath xPath
+     * @return QualifierMarker
+     */
     private QualifierMarker findQualifierMarker(Node sourceNode, String xPath) {
         for (QualifierMarker qualifierMarker : sourceNode.getQualifierMarkers()) {
             if (qualifierMarker.getRelativeXPath().equals(xPath)) {
@@ -202,13 +252,24 @@ public class MigQualificationService {
     }
 
 
+    /**
+     * Qualify the node based on the value and the qualifier paths.
+     * @param sourceNode Source Node
+     * @param value Value
+     * @param qualiferPaths Qualifier Paths
+     * @param mig MIG object
+     * @param markerData Qualifier Marker Data
+     * @throws MigAutomationException ex
+     */
     public void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths,
                             Mig mig, QualifierMarkerData markerData) throws MigAutomationException {
 
         QualifierMarker qualifierMarker = findQualifierMarker(sourceNode, markerData.getQualifyingRelativeXpath());
         String originalDomainXpath = sourceNode.getDomain().getXPath();
+        // the new domain Path is the same as the original one, but with the value of the qualifier marker = value
         String newDomainXpath = originalDomainXpath + "[" + qualifierMarker.getRelativeXPath() + "=" + value + "]";
         String xmlNodeName;
+        // Compute what should be the new values for the xmlNodeName
         if (qualifierMarker.getQualifierType().equals("Peer")) {
             xmlNodeName = sourceNode.getXMLNodeName() + "_pq_" + value;
         } else {
@@ -218,15 +279,21 @@ public class MigQualificationService {
         String domainGUID = generateGUID();
         String baseDomainGUID = generateGUID();
 
+        // Find the corresponding node that provides qualifying value to the source node based on the relative xPath
         Node correspondingNode = findSelectingNode(sourceNode, qualifierMarker.getRelativeXPath());
         if (correspondingNode == null) {
             throw new MigAutomationException("Could not find corresponding node for xPath: " + qualifierMarker.getRelativeXPath());
         }
 
+        // Retrieve the version id of the MIG File (e.g. D96A S3)
         String version = ((String)((Map<String, ?>) mig.getMessageTemplate()).get("VersionId"));
 
+        // Retrieve the code list based on the version and the id of the corresponding node, then find the code matching the found value from the payloads
         Codelist codeList = getCodeList(version, correspondingNode.getId());
         Optional<Code> code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst();
+
+        // if the code is not found in the code list, log an error and skip the qualification
+        // TODO: provide capability to support custom Code Lists
         if (code.isEmpty()) {
             log.error("Code not found in code list {} - value {}. Skipping node qualification", correspondingNode.getId(), value);
             Node newNode = findNode(sourceNode.getDomain().getXPath(), sourceNode.getParent().getNodes());
@@ -246,6 +313,7 @@ public class MigQualificationService {
             throw new MigAutomationException(e);
         }
 
+        // Set the values of the new node we're creating
         Node.NodeBuilder<?, ?> nodeBuilder = targetNode.toBuilder()
                 .isSelected(true)
                 .isOriginalNode(true) //only first time
@@ -264,10 +332,12 @@ public class MigQualificationService {
                         .domainGUID(baseDomainGUID)
                         .build());
 
+        // if the source Node was already a qualified Node, we will set it as not original
         if (sourceNode.getXMLNodeName().endsWith("]")) {
             nodeBuilder = nodeBuilder.isOriginalNode(false);
         }
 
+        // set additional fields to the Node
         nodeBuilder = nodeBuilder
                 .nodeStatus(NodeStatus.builder()
                         .status("Default")
@@ -290,6 +360,8 @@ public class MigQualificationService {
                 ));
 
         targetNode = nodeBuilder.build();
+
+        // Add the qualifier path to the Qualifier Paths, that will be later on added to the MIG object
         QualifierPath qualifierPath = QualifierPath.builder()
                 .key(targetNode.getDomain().getXPath() + "[" + targetNode.getQualifiers().get(0).getRelativeXPath() + "]")
                 .qualifyingXPath(targetNode.getQualifiers().get(0).getRelativeXPath())
@@ -297,7 +369,7 @@ public class MigQualificationService {
                 .build();
         qualiferPaths.put(qualifierPath.getKey(), qualifierPath);
 
-        // Create new description contatenating current text and code list text  and set new Name artifact value
+        // Create new description concatenating current text and code list text  and set new Name artifact value
         String nodeName = mig.getDocumentationArtifacts().get(targetNode.getDocumentation().getName().getBaseArtifactValue().getId()) + " - " + codelistdesc;
         String nodeNameGUID = generateGUID();
         targetNode.getDocumentation().getName().setArtifactValue(ArtifactValue.builder()
@@ -308,22 +380,30 @@ public class MigQualificationService {
                 .build());
         mig.getDocumentationArtifacts().put(nodeNameGUID, nodeName);
 
+        // Remove the original node from the parent and add the new node
         List<Node> siblings = sourceNode.getParent().getNodes();
         int index = siblings.indexOf(sourceNode);
         siblings.add(index, targetNode);
         targetNode.setParent(sourceNode.getParent());
         populateParent(targetNode);
 
-
+        // Retrieve the Selecting node and qualify it accordingly
         Node selectingNode = findSelectingNode(targetNode, qualifierMarker.getRelativeXPath());
         qualifyCorrespondingNode(selectingNode, code.get(), codeList, targetNode.getQualifiers().get(0));
+
+        // for each children node of the qualified node, update the domain values
         List<Node> childrenNodes = new ArrayList<>(targetNode.getNodes());
         for (Node child : childrenNodes) {
             qualifyChildrenNodes(child, qualiferPaths);
         }
     }
 
-    private void qualifyChildrenNodes(Node sourceNode, Map<String, QualifierPath> qualiferPaths) throws MigAutomationException {
+    /**
+     * Qualify the children nodes of the Qualified Node.
+     * @param sourceNode Source Node
+     * @param qualifierPaths xPath
+     */
+    private void qualifyChildrenNodes(Node sourceNode, Map<String, QualifierPath> qualifierPaths) throws MigAutomationException {
         String newDomainXpath = sourceNode.getParent().getDomain().getXPath() + "/" + sourceNode.getId();
 
         // create a deep copy of the original node
@@ -334,6 +414,7 @@ public class MigQualificationService {
             throw new MigAutomationException(e);
         }
 
+        // Set the Domain values to the node
         Node.NodeBuilder<?, ?> nodeBUilder = setDomainValues(targetNode.toBuilder(), sourceNode, newDomainXpath);
         nodeBUilder.isOriginalNode(true); // only first time
         targetNode = nodeBUilder.build();
@@ -344,10 +425,11 @@ public class MigQualificationService {
                     .key(targetNode.getDomain().getXPath() + "[" + qualifierMarker.getRelativeXPath() + "]")
                     .qualifyingXPath(qualifierMarker.getRelativeXPath())
                     .build();
-            qualiferPaths.put(qualifierPath.getKey(), qualifierPath);
+            qualifierPaths.put(qualifierPath.getKey(), qualifierPath);
         }
 
 
+        // remove the original node from the parent and add the new node
         List<Node> siblings = sourceNode.getParent().getNodes();
         int index = siblings.indexOf(sourceNode);
         siblings.remove(index);
@@ -356,15 +438,24 @@ public class MigQualificationService {
         populateParent(targetNode);
         List<Node> children = new ArrayList<>(targetNode.getNodes());
 
+        // perform the same action recursively for each child node
         for (Node child : children) {
-            qualifyChildrenNodes(child, qualiferPaths);
+            qualifyChildrenNodes(child, qualifierPaths);
         }
     }
 
 
+    /**
+     * Qualify the corresponding node based on the source node and the code list.
+     * @param sourceNode Source Node
+     * @param code code
+     * @param codeList codeList
+     * @return Node
+     */
     private void qualifyCorrespondingNode(Node sourceNode, Code code, Codelist codeList, Qualifier qualifier) {
         if (sourceNode.getSelectedCodelist() == null) {
 
+            // create a new CodelistReference object
             CodelistReference reference = CodelistReference.builder()
                     .vertexGUID(qualifier.getCodelistReferenceVertexGUID())
                     .id(codeList.getIdentification().getId())
@@ -402,6 +493,7 @@ public class MigQualificationService {
                             .build())
                     .build();
 
+            // set the status and set the Code list reference, codes, etc
             sourceNode.setNodeStatus(NodeStatus.builder()
                     .status("Default")
                     .comment("")

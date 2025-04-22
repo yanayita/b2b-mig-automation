@@ -23,6 +23,10 @@ public class MigUtils {
         return uuid.toString().replace("-", "");
     }
 
+    public static String generateGUIDv2() {
+        return UUID.randomUUID().toString();
+    }
+
     public void populateParent(Node node) {
         for (Node child : node.getNodes()) {
             child.setParent(node);

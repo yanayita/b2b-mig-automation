@@ -68,6 +68,9 @@ public class MigFileService {
     @Autowired
     private MigQualificationService migQualificationService;
 
+    @Autowired
+    private MigCreationService migCreationService;
+
     public void processMigZip(String zipFilePath, String ediSamplesFolder) throws MigAutomationException {
         String unzippedFolder = extractZipFile(zipFilePath);
         new File(unzippedFolder).deleteOnExit();
@@ -148,6 +151,11 @@ public class MigFileService {
         } catch (IOException e) {
             throw new MigAutomationException("Error reading file: " + zipFilePath, e);
         }
+    }
+
+    public void createMigAndQualify(String messageType, String versionId, String migName, String ediSamplesFolder) throws MigAutomationException {
+        File exportFile = this.migCreationService.createAndExportMig(messageType, versionId, migName);
+        this.processMigZip(exportFile.getPath(), ediSamplesFolder);
     }
 }
 

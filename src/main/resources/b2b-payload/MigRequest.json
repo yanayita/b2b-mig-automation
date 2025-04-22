@@ -1,0 +1,46 @@
+{
+  "Mags": [],
+  "Migs": [
+    {
+      "ObjectGUID": "1af79f63bdbb4e63affc0ae7bdbc3941",
+      "MIGGUID": "eb0be133d91c4d2193376fc0bd4abd5d",
+      "ImportCorrelationObjectId": "1af79f63bdbb4e63affc0ae7bdbc3941",
+      "ImportCorrelationGroupId": "eb0be133d91c4d2193376fc0bd4abd5d",
+      "VersionId": "1.0",
+      "Name": "ED_Test",
+      "Status": "Draft",
+      "HasEnvelope": true,
+      "MessageTemplate": {
+        "TypeSystemId": "UNEDIFACT",
+        "TypeSystemDisplayId": "UN/EDIFACT",
+        "VersionId": "D.96A S3",
+        "VersionDisplayId": "D.96A S3",
+        "Revision": 2,
+        "Id": "ORDERS",
+        "DisplayId": "ORDERS",
+        "Name": "Purchase order message",
+        "IsCustomMessage": false
+      },
+      "EnvelopeTemplate": {
+        "TypeSystemId": "UNEDIFACT",
+        "TypeSystemDisplayId": "UN/EDIFACT",
+        "VersionId": "D.96A S3",
+        "VersionDisplayId": "D.96A S3",
+        "Revision": 2,
+        "Id": "EnvelopeForMessagesS3",
+        "DisplayId": "EnvelopeForMessagesS3",
+        "Name": "Envelope for Messages (Syntax Versions 1/2/3)",
+        "IsCustomMessage": false
+      },
+      "AdministrativeData": {
+        "CreatedBy": "eduard.dominguez@se.com",
+        "CreatedOn": 1744288873145,
+        "ModifiedBy": "eduard.dominguez@se.com",
+        "ModifiedOn": 1744288873145
+      }
+    }
+  ],
+  "Msgs": [],
+  "PTSs": [],
+  "Dependencies": []
+}
