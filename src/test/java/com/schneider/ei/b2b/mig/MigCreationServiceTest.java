@@ -38,14 +38,14 @@ public class MigCreationServiceTest {
     }
 
     @Test
-    public void testCreateMigRequest() throws JsonProcessingException {
+    public void testCreateMigRequest() throws JsonProcessingException, MigAutomationException {
         MigRequest migRequest = this.migCreationService.createMigRequest("ORDERS", "D.96A S3", "ED_Test");
         String migRequestString = this.mapper.writeValueAsString(migRequest);
         System.out.println(migRequestString);
     }
 
     @Test
-    public void testCreateRemoteMig() throws JsonProcessingException {
+    public void testCreateRemoteMig() throws MigAutomationException {
         MigRequest migRequest = this.migCreationService.createMigRequest("ORDERS", "D.96A S3", "ED_Test");
         MigResponse migResponse = this.migCreationService.createRemoteMig(migRequest);
         System.out.println(migResponse);
@@ -69,7 +69,7 @@ public class MigCreationServiceTest {
 
     @Test
     public void testCreateAndExportMig() throws MigAutomationException {
-        File exportFile = this.migCreationService.createAndExportMig("ORDERS", "D.96A S3", "ED_Test2");
+        File exportFile = this.migCreationService.createAndExportMig("ORDERS", "D.96A S3", "ED_Test2", true);
         System.out.println(exportFile);
     }
 }

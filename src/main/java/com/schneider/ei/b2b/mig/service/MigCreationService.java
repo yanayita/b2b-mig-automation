@@ -1,6 +1,14 @@
 package com.schneider.ei.b2b.mig.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.Option;
+import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
+import com.jayway.jsonpath.spi.json.JsonProvider;
+import com.jayway.jsonpath.spi.mapper.JacksonMappingProvider;
+import com.jayway.jsonpath.spi.mapper.MappingProvider;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
 import com.schneider.ei.b2b.mig.model.export.ExportRequest;
@@ -15,6 +23,7 @@ import com.schneider.ei.b2b.mig.model.request.MessageTemplate;
 import com.schneider.ei.b2b.mig.model.request.MigRequest;
 import com.schneider.ei.b2b.mig.model.request.MigResponse;
 import com.schneider.ei.b2b.mig.model.request.OwnBusinessContext;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -34,13 +43,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Service
 public class MigCreationService {
@@ -56,7 +68,32 @@ public class MigCreationService {
 
     private String xCsrfToken;
 
-    public MigRequest createMigRequest(String messageType, String versionId, String migName) {
+
+
+    public MigCreationService() {
+        Configuration.setDefaults(new Configuration.Defaults() {
+
+            private final JsonProvider jsonProvider = new JacksonJsonProvider();
+            private final MappingProvider mappingProvider = new JacksonMappingProvider();
+
+            @Override
+            public JsonProvider jsonProvider() {
+                return jsonProvider;
+            }
+
+            @Override
+            public MappingProvider mappingProvider() {
+                return mappingProvider;
+            }
+
+            @Override
+            public Set<Option> options() {
+                return EnumSet.noneOf(Option.class);
+            }
+        });
+    }
+
+    public MigRequest createMigRequest(String messageType, String versionId, String migName) throws MigAutomationException {
 
         String nameGUID = "UID-" + MigUtils.generateGUIDv2();
         String summaryGUID = "UID-" + MigUtils.generateGUIDv2();
@@ -69,8 +106,26 @@ public class MigCreationService {
                     .key("00036")
                     .name("Create Order")
                     .build());
+        } else if (messageType.equalsIgnoreCase("INVOIC")) {
+            documentationValue = "Invoice message";
+            contextValues.add(ContextValue.builder()
+                    .key("00035")
+                    .name("Create Invoice")
+                    .build());
+        } else if (messageType.equalsIgnoreCase("ORDRSP")) {
+            documentationValue = "Purchase order response message";
+            contextValues.add(ContextValue.builder()
+                    .key("00029")
+                    .name("Confirm/Verify Payment Orders")
+                    .build());
+        } else if (messageType.equalsIgnoreCase("DESADV")) {
+            documentationValue = "Despatch advice message";
+            contextValues.add(ContextValue.builder()
+                    .key("00134")
+                    .name("Notify Of Shipment Status")
+                    .build());
         } else {
-            documentationValue = "Unknown";
+            throw new MigAutomationException("Unsupported message type: " + messageType);
         }
 
         Map<String, String> documentationArtifacts = new LinkedHashMap<>();
@@ -141,7 +196,16 @@ public class MigCreationService {
         return restTemplate.postForObject(url, createRequestEntityUpdate(migRequest, this::findRemoteMigs), MigResponse.class);
     }
 
-    public File createAndExportMig(String messageType, String versionId, String migName) throws MigAutomationException {
+    public File createAndExportMig(String messageType, String versionId, String migName, boolean checkIfExists) throws MigAutomationException {
+        if (checkIfExists) {
+            String remoteMigs = findRemoteMigs();
+            List<String> migNames = JsonPath.read(remoteMigs, "$[*].Migs[*].Documentation.Name.ArtifactValue.Id");
+            Optional<String> foundMigName = migNames.stream().filter(item -> StringUtils.equals(item, migName)).findAny();
+            if (foundMigName.isPresent()) {
+                throw new MigAutomationException("MIG with name " + migName + " already exists.");
+            }
+        }
+
         MigRequest migRequest = createMigRequest(messageType, versionId, migName);
         MigResponse migResponse = createRemoteMig(migRequest);
         MigMetadata migMetadata = getMigMetadata(migResponse.getId());
@@ -164,14 +228,14 @@ public class MigCreationService {
     }
 
 
-    public List<?> findRemoteMigs() {
+    public String findRemoteMigs() {
         String url = UriComponentsBuilder.fromUriString("/api/1.0/migs")
                 .toUriString();
 
-        ResponseEntity<Object[]> responseEntity = restTemplate.exchange(url, HttpMethod.GET, createRequestEntityRead(), Object[].class);
+        ResponseEntity<String> responseEntity = restTemplate.exchange(url, HttpMethod.GET, createRequestEntityRead(), String.class);
         retrieveXCsrfToken(responseEntity.getHeaders());
         Objects.requireNonNull(responseEntity.getBody());
-        return Arrays.asList(responseEntity.getBody());
+        return responseEntity.getBody();
     }
 
     public MigMetadata getMigMetadata(String migId) {
