@@ -131,8 +131,8 @@ public class MigFileService {
         }
     }
 
-    public void createMigAndQualify(String messageType, String versionId, String migName, String ediSamplesFolder, boolean checkIfExists) throws MigAutomationException {
-        File exportFile = this.migCreationService.createAndExportMig(messageType, versionId, migName, checkIfExists);
+    public void createMigAndQualify(String messageType, String versionId, String migName, String ediSamplesFolder) throws MigAutomationException {
+        File exportFile = this.migCreationService.createAndExportMig(messageType, versionId, migName);
         this.processMigZip(exportFile.getPath(), ediSamplesFolder);
     }
 
@@ -161,7 +161,7 @@ public class MigFileService {
         log.info("Starting to process directory: " + directory.getPath());
         createMigAndQualify(directory.getName(), versionName + " S3",
                 migName,
-                directory.getPath(), true);
+                directory.getPath());
 
     }
 
@@ -200,8 +200,11 @@ public class MigFileService {
         List<File> migFiles = new ArrayList<>();
         Manifest mergedManifest = null;
 
+        List<File> tmpFolders = new ArrayList<>();
+
         for (File outputFile : outputFiles) {
             String unzippedFolder = extractZipFile(outputFile.getPath());
+            tmpFolders.add(new File(unzippedFolder));
 
             List<Path> files = migUtils.listFilesUsingFileWalk(unzippedFolder);
             Path manifestFile = null;
@@ -265,6 +268,10 @@ public class MigFileService {
             zipFile.addFolder(new File(tmpFolder + "migs"));
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+        tmpFolders.add(new File(tmpFolder));
+        for (File tmpFolderToDelete : tmpFolders) {
+            tmpFolderToDelete.delete();
         }
     }
 }

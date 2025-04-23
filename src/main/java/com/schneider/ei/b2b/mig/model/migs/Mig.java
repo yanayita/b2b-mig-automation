@@ -77,9 +77,9 @@ public class Mig {
     @JsonProperty("Nodes")
     private List<Node> nodes;
     @JsonProperty("ComplexTypes")
-    private Object complexTypes;
+    private Map<String, ComplexType> complexTypes;
     @JsonProperty("SimpleTypes")
-    private Object simpleTypes;
+    private Map<String, ComplexType> simpleTypes;
     @JsonProperty("STLocalCodelists")
     private Object stLocalCodelists;
     @JsonProperty("DocumentationArtifacts")

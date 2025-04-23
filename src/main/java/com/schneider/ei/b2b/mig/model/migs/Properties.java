@@ -45,4 +45,10 @@ public class Properties {
     private Value allValuesSelected;
     @JsonProperty("IsMessageLevel")
     private Value isMessageLevel;
+    @JsonProperty("MinLength")
+    private Value minLength;
+    @JsonProperty("MaxLength")
+    private Value maxLength;
+    @JsonProperty("PrimitiveType")
+    private Value primitiveType;
 }

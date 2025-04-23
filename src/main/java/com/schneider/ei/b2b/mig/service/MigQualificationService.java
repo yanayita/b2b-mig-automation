@@ -7,6 +7,7 @@ import com.schneider.ei.b2b.mig.model.codelists.Code;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
 import com.schneider.ei.b2b.mig.model.migs.ArtifactValue;
 import com.schneider.ei.b2b.mig.model.migs.CodelistReference;
+import com.schneider.ei.b2b.mig.model.migs.ComplexType;
 import com.schneider.ei.b2b.mig.model.migs.Domain;
 import com.schneider.ei.b2b.mig.model.migs.Mig;
 import com.schneider.ei.b2b.mig.model.migs.Node;
@@ -118,10 +119,22 @@ public class MigQualificationService {
                         continue;
                     }
 
+                    boolean anyFound = false;
                     // for each value found in the analysis results, for this qualifying path qualify the node
                     for (String value : values) {
-                        qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
+                        Node newNode = qualifyNode(sourceNode, value, qualiferPaths, mig, qualifierMarkerData);
+                        if (newNode != null) {
+                            anyFound = true;
+                        }
                     }
+
+                    // if none of the values were correct code lists, set it to selected
+                    if (!anyFound) {
+                        Node newNode = findNode(sourceNode.getDomain().getXPath(), sourceNode.getParent().getNodes());
+                        newNode.setIsSelected(true);
+                        qualifyChildrenNodes(newNode, qualiferPaths);
+                    }
+
                     // the previous will create a clone node, after done, remove the original unqualified node
                     List<Node> siblings = sourceNode.getParent().getNodes();
                     siblings.remove(sourceNode);
@@ -260,8 +273,9 @@ public class MigQualificationService {
      * @param mig MIG object
      * @param markerData Qualifier Marker Data
      * @throws MigAutomationException ex
+     * @return Qualified Node
      */
-    public void qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths,
+    public Node qualifyNode(Node sourceNode, String value, Map<String, QualifierPath> qualiferPaths,
                             Mig mig, QualifierMarkerData markerData) throws MigAutomationException {
 
         QualifierMarker qualifierMarker = findQualifierMarker(sourceNode, markerData.getQualifyingRelativeXpath());
@@ -289,17 +303,26 @@ public class MigQualificationService {
         String version = ((String)((Map<String, ?>) mig.getMessageTemplate()).get("VersionId"));
 
         // Retrieve the code list based on the version and the id of the corresponding node, then find the code matching the found value from the payloads
-        Codelist codeList = getCodeList(version, correspondingNode.getId());
+
+        Optional<CodelistReference> codeListRefOpt = Optional.ofNullable(correspondingNode.getSimpleTypeVertexGUID())
+                .map(item -> mig.getSimpleTypes().get(item))
+                .map(ComplexType::getCodelistReferences)
+                        .orElse(Collections.emptyList()).stream().findFirst();
+        CodelistReference codeListRef;
+        if (codeListRefOpt.isEmpty()) {
+            throw new MigAutomationException("Could not find code list reference for xPath: " + qualifierMarker.getRelativeXPath());
+        } else {
+            codeListRef = codeListRefOpt.get();
+        }
+
+        Codelist codeList = getCodeList(codeListRef.getTypeSystemId(), codeListRef.getVersionId(), codeListRef.getId());
         Optional<Code> code = codeList.getCodes().stream().filter(item -> item.getId().equals(value)).findFirst();
 
         // if the code is not found in the code list, log an error and skip the qualification
         // TODO: provide capability to support custom Code Lists
         if (code.isEmpty()) {
             log.error("Code not found in code list {} - value {}. Skipping node qualification", correspondingNode.getId(), value);
-            Node newNode = findNode(sourceNode.getDomain().getXPath(), sourceNode.getParent().getNodes());
-            newNode.setIsSelected(true);
-            qualifyChildrenNodes(newNode, qualiferPaths);
-            return;
+            return null;
         }
 
         String idDoc = code.get().getDocumentation().getName().getBaseArtifactValue().getId();
@@ -396,6 +419,7 @@ public class MigQualificationService {
         for (Node child : childrenNodes) {
             qualifyChildrenNodes(child, qualiferPaths);
         }
+        return targetNode;
     }
 
     /**
@@ -547,12 +571,12 @@ public class MigQualificationService {
         return MigUtils.generateGUID();
     }
 
-    private Codelist getCodeList(String version, String codeListType) throws MigAutomationException {
+    private Codelist getCodeList(String typeSystem, String version, String codeListType) throws MigAutomationException {
         String filePath = "./codelists/" + version + "/" + codeListType + ".json";
         File file = new File(filePath);
         if (!file.exists()) {
             try {
-                Codelist codelist = retrieveCodeList(version, codeListType);
+                Codelist codelist = retrieveCodeList(typeSystem, version, codeListType);
                 Files.createDirectories(file.getParentFile().toPath());
                 mapper.writeValue(file, codelist);
                 return codelist;
@@ -568,9 +592,9 @@ public class MigQualificationService {
         }
     }
 
-    private Codelist retrieveCodeList(String version, String codeListType) {
-        String url = UriComponentsBuilder.fromUriString("/api/1.0/typesystems/UNEDIFACT/versions/{version}/codelists/{codeListType}")
-                .buildAndExpand(version, codeListType).encode()
+    private Codelist retrieveCodeList(String typeSystem, String version, String codeListType) {
+        String url = UriComponentsBuilder.fromUriString("/api/1.0/typesystems/{typeSystem}/versions/{version}/codelists/{codeListType}")
+                .buildAndExpand(typeSystem, version, codeListType).encode()
                 .toUriString();
         return restTemplate.getForObject(url, Codelist.class);
     }

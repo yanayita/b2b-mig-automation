@@ -1,5 +1,6 @@
 package com.schneider.ei.b2b.mig.service;
 
+import com.schneider.ei.b2b.mig.B2BMigAutomation;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.process.AnalysisResults;
 import com.schneider.ei.b2b.mig.model.process.QualifierMarkerData;
@@ -12,7 +13,6 @@ import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.daffodil.japi.ValidationMode;
 import org.apache.daffodil.lib.exceptions.UsageException;
 import org.example.EdifactInfo;
-import org.example.Main;
 import org.smooks.Smooks;
 import org.smooks.api.ExecutionContext;
 import org.smooks.api.SmooksException;
@@ -117,7 +117,7 @@ public class EdifactAnalyzerService {
         List<Path> files =  this.migUtils.listFilesUsingFileWalk(parentFolder);
         String version = determineEdifactVersionMultiple(files);
 
-        Smooks smooks = new Smooks(new DefaultApplicationContextBuilder().withClassLoader(Main.class.getClassLoader()).build());
+        Smooks smooks = new Smooks(new DefaultApplicationContextBuilder().withClassLoader(B2BMigAutomation.class.getClassLoader()).build());
         EdifactReaderConfigurator configurator = new EdifactReaderConfigurator("/" + version + "/EDIFACT-Messages.dfdl.xsd")
                 .setMessageTypes(Arrays.asList("ORDERS", "ORDRSP", "INVOIC", "DESADV"));
         configurator.setCacheOnDisk(true);

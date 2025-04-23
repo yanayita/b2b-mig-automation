@@ -1,7 +1,10 @@
 package com.schneider.ei.b2b.mig;
 
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
+import com.schneider.ei.b2b.mig.model.search.Mig;
+import com.schneider.ei.b2b.mig.model.search.SearchResult;
 import com.schneider.ei.b2b.mig.service.EdifactAnalyzerService;
+import com.schneider.ei.b2b.mig.service.MigCreationService;
 import com.schneider.ei.b2b.mig.service.MigFileService;
 import com.schneider.ei.b2b.mig.service.MigUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @SpringBootTest
@@ -28,6 +32,9 @@ public class MigFileServiceTest {
 
     @Autowired
     private EdifactAnalyzerService edifactAnalyzerService;
+
+    @Autowired
+    private MigCreationService migCreationService;
 
     @Test
     public void testProcessMigZipORDERS() throws MigAutomationException {
@@ -68,7 +75,7 @@ public class MigFileServiceTest {
     public void testCreateMigAndQualify() throws MigAutomationException {
         this.migFileService.createMigAndQualify("ORDERS", "D.96A S3",
                 "MIG-EDI-01A RS COMPONENTS-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE (ED)_2",
-                "./TOP50Customers/Partners/RS COMPONENTS/ORDERS", true);
+                "./TOP50Customers/Partners/RS COMPONENTS/ORDERS");
     }
 
     @Test
@@ -77,16 +84,55 @@ public class MigFileServiceTest {
         String zipPath = "./src/test/resources/test_01/MIG-EDI-01A WINDMOELLER-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE.zip";
         //migFileService.processMigZip(zipPath, ediSamplesPath);
 
-        ediSamplesPath = "./TOP50Customers/Partners/RS COMPONENTS/ORDERS";
-        zipPath = "./output/MIG-EDI-01A RS COMPONENTS-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE (ED).zip";
+        ediSamplesPath = "./TOP50Customers/Partners/EMIL LOEFFELHARDT/ORDERS";
+        zipPath = "./output/MIG-EDI-01A EMIL LOEFFELHARDT-GERMANY - UNEDIFACT D.96A ORDERS–SOURCE (ED).zip";
         migFileService.processMigZip(zipPath, ediSamplesPath);
     }
 
     @Test
     public void testProcessPartnerFolder() throws MigAutomationException {
-        List<String> folders = Arrays.asList("WINDMOELLER & HOELSCHER KG",
+        List<String> folders = Arrays.asList(
+        //        "ADALBERT ZAJADACZ",
+        //        "ALEXANDER BUERKLE",
+        //        "BLUMENBECKER AUTOMATISIERUNGS",
+        //        "CARL METTLER",
+        //        "CARL METTLER GMBH",
+        //        "CARL METTLER S.A R.L",
+        //        "CL. BERGMANN GMBH",
+        //        "EFG GIENGER KG",
+        //        "EFG RHEINLAND",
+        //        "EFG SACHSEN KG",
+        //        "EGU ELEKTRO GROSSHANDELS UNION",
+        //        "ELEKTRO SEIWERT(FEGIME)",
+        //       "EMIL LOEFFELHARDT",
+        //       "ERNST GRANZOW GMBH",
+        //       "FAMO GMBH",
+        //       "FEGA & SCHMITT ANSBACH",
+        //       "FISCHER-J.W.ZANDER",
+        //       "FRITZ KRIEGER",
+        //       "GEA FARM TECHNOLOGIES",
+        //       "GEBHARDT FÖRDERTECHNIK GMBH",
+        //       "GEBR. EBERHARD",
+        //       "GÄFGEN ELEKTROGROßHANDEL",
+        //        "H. GAUTZSCH ELEKTRO",
+                "H. GAUTZSCH GROßHANDEL",
+                "H. GAUTZSCH GROßHANDEL BAYERN",
+                "HARDY SCHMITZ",
+                "HARRO HÖFLIGER",
+                "HERMANN WALDNER",
+                "HILLMANN & PLOOG",
+                "LIFTKET HOFFMANN",
+                "LOGISTIK- UND DIENSTLEISTUNGS",
+                "LUDZ MITTE GMBH",
+                "OSKAR BÖTTCHER",
+                "REXEL-GERMANY",
                 "RS COMPONENTS",
-                "UHLMANN PAC-SYSTEME");
+                "UHLMANN PAC-SYSTEME",
+                "UNI ELEKTRO FACHGROSSHANDEL",
+                "Weber Food Technology",
+                "WILHELM RINK",
+                "WINDMOELLER & HOELSCHER KG",
+                "YESSS ELEKTROFACHGROßHANDLUNG");
 
         migFileService.processPartnerFolders("./TOP50Customers/Partners/", folders, "GERMANY");
         migFileService.mergeAllOutput();
@@ -97,5 +143,15 @@ public class MigFileServiceTest {
         migFileService.mergeAllOutput();
     }
 
+    @Test
+    public void deleteTestMigs() {
+        List<SearchResult> searchResults = migCreationService.findRemoteMigs();
+        List<Mig> foundMigs = searchResults.get(0).getMigs().stream()
+                .filter(item -> item.getDocumentation().getName().getArtifactValue().getId().endsWith("(ED)"))
+                .toList();
+        for (Mig mig : foundMigs) {
+            migCreationService.deleteRemoteMig(mig.getMigGuid());
+        }
+    }
 
 }

@@ -69,7 +69,7 @@ public class MigCreationServiceTest {
 
     @Test
     public void testCreateAndExportMig() throws MigAutomationException {
-        File exportFile = this.migCreationService.createAndExportMig("ORDERS", "D.96A S3", "ED_Test2", true);
+        File exportFile = this.migCreationService.createAndExportMig("ORDERS", "D.96A S3", "ED_Test2");
         System.out.println(exportFile);
     }
 }

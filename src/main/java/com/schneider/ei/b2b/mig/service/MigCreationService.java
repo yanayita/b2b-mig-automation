@@ -12,7 +12,6 @@ import com.jayway.jsonpath.spi.mapper.MappingProvider;
 import com.schneider.ei.b2b.mig.model.MigAutomationException;
 import com.schneider.ei.b2b.mig.model.codelists.Codelist;
 import com.schneider.ei.b2b.mig.model.export.ExportRequest;
-import com.schneider.ei.b2b.mig.model.export.Mig;
 import com.schneider.ei.b2b.mig.model.export.MigMetadata;
 import com.schneider.ei.b2b.mig.model.migs.ArtifactValue;
 import com.schneider.ei.b2b.mig.model.migs.Documentation;
@@ -23,6 +22,9 @@ import com.schneider.ei.b2b.mig.model.request.MessageTemplate;
 import com.schneider.ei.b2b.mig.model.request.MigRequest;
 import com.schneider.ei.b2b.mig.model.request.MigResponse;
 import com.schneider.ei.b2b.mig.model.request.OwnBusinessContext;
+import com.schneider.ei.b2b.mig.model.search.Mig;
+import com.schneider.ei.b2b.mig.model.search.SearchResult;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -55,6 +57,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class MigCreationService {
 
     @Autowired
@@ -196,19 +199,26 @@ public class MigCreationService {
         return restTemplate.postForObject(url, createRequestEntityUpdate(migRequest, this::findRemoteMigs), MigResponse.class);
     }
 
-    public File createAndExportMig(String messageType, String versionId, String migName, boolean checkIfExists) throws MigAutomationException {
-        if (checkIfExists) {
-            String remoteMigs = findRemoteMigs();
-            List<String> migNames = JsonPath.read(remoteMigs, "$[*].Migs[*].Documentation.Name.ArtifactValue.Id");
-            Optional<String> foundMigName = migNames.stream().filter(item -> StringUtils.equals(item, migName)).findAny();
-            if (foundMigName.isPresent()) {
-                throw new MigAutomationException("MIG with name " + migName + " already exists.");
-            }
+    public File createAndExportMig(String messageType, String versionId, String migName) throws MigAutomationException {
+
+        List<SearchResult> remoteMigs = findRemoteMigs();
+        Optional<Mig> foundMig =  remoteMigs.get(0).getMigs().stream()
+                .filter(item -> StringUtils.equals(item.getDocumentation().getName().getArtifactValue().getId(), migName))
+                .findAny();
+
+        MigMetadata migMetadata;
+        if (foundMig.isPresent()) {
+            throw new MigAutomationException("MIG with name " + migName + " already exists.");
+            // TODO: add support to update existing MIG
+            //log.warn("MIG with name " + migName + " already exists.");
+            //migMetadata = getMigMetadata(foundMig.get().getObjectGUID());
+        } else {
+            MigRequest migRequest = createMigRequest(messageType, versionId, migName);
+            MigResponse migResponse = createRemoteMig(migRequest);
+            migMetadata = getMigMetadata(migResponse.getId());
         }
 
-        MigRequest migRequest = createMigRequest(messageType, versionId, migName);
-        MigResponse migResponse = createRemoteMig(migRequest);
-        MigMetadata migMetadata = getMigMetadata(migResponse.getId());
+
         ExportRequest exportRequest = ExportRequest.builder()
                 .migs(Collections.singletonList(migMetadata.getValue()))
                 .build();
@@ -228,14 +238,14 @@ public class MigCreationService {
     }
 
 
-    public String findRemoteMigs() {
+    public List<SearchResult> findRemoteMigs() {
         String url = UriComponentsBuilder.fromUriString("/api/1.0/migs")
                 .toUriString();
 
-        ResponseEntity<String> responseEntity = restTemplate.exchange(url, HttpMethod.GET, createRequestEntityRead(), String.class);
+        ResponseEntity<SearchResult[]> responseEntity = restTemplate.exchange(url, HttpMethod.GET, createRequestEntityRead(), SearchResult[].class);
         retrieveXCsrfToken(responseEntity.getHeaders());
         Objects.requireNonNull(responseEntity.getBody());
-        return responseEntity.getBody();
+        return Arrays.asList(responseEntity.getBody());
     }
 
     public MigMetadata getMigMetadata(String migId) {
@@ -255,6 +265,14 @@ public class MigCreationService {
         ResponseEntity<byte[]> responseEntity = restTemplate.exchange(url, HttpMethod.POST, createRequestEntityUpdate(exportRequest, this::findRemoteMigs), byte[].class);
         Objects.requireNonNull(responseEntity.getBody());
         return responseEntity.getBody();
+    }
+
+    public void deleteRemoteMig(String migId) {
+        String url = UriComponentsBuilder.fromUriString("/api/1.0/migs/{migId}")
+                .buildAndExpand(migId)
+                .toUriString();
+        HttpEntity<?> request = createRequestEntityUpdate(null, this::findRemoteMigs);
+        restTemplate.exchange(url, HttpMethod.DELETE, request, Void.class);;
     }
 
 
